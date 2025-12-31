@@ -9,29 +9,29 @@ import (
 )
 
 var (
-	ErrCircuitOpen     = errors.New("circuit breaker is open")
+	ErrCircuitOpen       = errors.New("circuit breaker is open")
 	ErrRateLimitExceeded = errors.New("rate limit exceeded")
-	ErrConnectionLimit  = errors.New("connection limit exceeded")
+	ErrConnectionLimit   = errors.New("connection limit exceeded")
 )
 
 // ConnectionGate manages connection access with advanced features
 type ConnectionGate struct {
-	circuitBreaker *CircuitBreaker
-	rateLimiter    *RateLimiter
+	circuitBreaker    *CircuitBreaker
+	rateLimiter       *RateLimiter
 	connectionLimiter *ConnectionLimiter
-	mu              sync.RWMutex
+	mu                sync.RWMutex
 }
 
 // CircuitBreaker implements circuit breaker pattern
 type CircuitBreaker struct {
-	maxFailures      int
-	resetTimeout     time.Duration
-	halfOpenTimeout  time.Duration
-	failureCount     int64
-	lastFailureTime  time.Time
-	state            int32 // 0: closed, 1: open, 2: half-open
-	mu               sync.RWMutex
-	onStateChange    func(from, to string)
+	maxFailures     int
+	resetTimeout    time.Duration
+	halfOpenTimeout time.Duration
+	failureCount    int64
+	lastFailureTime time.Time
+	state           int32 // 0: closed, 1: open, 2: half-open
+	mu              sync.RWMutex
+	onStateChange   func(from, to string)
 }
 
 const (
@@ -42,11 +42,11 @@ const (
 
 // RateLimiter implements token bucket rate limiting
 type RateLimiter struct {
-	tokens        int64
-	maxTokens     int64
-	refillRate    int64 // tokens per second
-	lastRefill    time.Time
-	mu            sync.Mutex
+	tokens     int64
+	maxTokens  int64
+	refillRate int64 // tokens per second
+	lastRefill time.Time
+	mu         sync.Mutex
 }
 
 // ConnectionLimiter limits concurrent connections
@@ -71,10 +71,10 @@ type GateConfig struct {
 	MaxFailures     int
 	ResetTimeout    time.Duration
 	HalfOpenTimeout time.Duration
-	
+
 	// Rate limiting
 	MaxRequestsPerSecond int64
-	
+
 	// Connection limiting
 	MaxConcurrentConnections int64
 }
@@ -85,19 +85,19 @@ func (cg *ConnectionGate) Allow(ctx context.Context) error {
 	if err := cg.circuitBreaker.Allow(); err != nil {
 		return err
 	}
-	
+
 	// Check rate limiter
 	if err := cg.rateLimiter.Allow(); err != nil {
 		cg.circuitBreaker.RecordFailure()
 		return err
 	}
-	
+
 	// Check connection limiter
 	if err := cg.connectionLimiter.Acquire(); err != nil {
 		cg.circuitBreaker.RecordFailure()
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -130,7 +130,7 @@ func NewCircuitBreaker(config *GateConfig) *CircuitBreaker {
 		halfOpenTimeout: 10 * time.Second,
 		state:           circuitClosed,
 	}
-	
+
 	if config != nil {
 		if config.MaxFailures > 0 {
 			cb.maxFailures = config.MaxFailures
@@ -142,7 +142,7 @@ func NewCircuitBreaker(config *GateConfig) *CircuitBreaker {
 			cb.halfOpenTimeout = config.HalfOpenTimeout
 		}
 	}
-	
+
 	return cb
 }
 
@@ -151,7 +151,7 @@ func (cb *CircuitBreaker) Allow() error {
 	cb.mu.RLock()
 	state := atomic.LoadInt32(&cb.state)
 	cb.mu.RUnlock()
-	
+
 	switch state {
 	case circuitOpen:
 		// Check if we should transition to half-open
@@ -167,21 +167,21 @@ func (cb *CircuitBreaker) Allow() error {
 		}
 		cb.mu.Unlock()
 		return ErrCircuitOpen
-		
+
 	case circuitHalfOpen:
 		return nil
-		
+
 	case circuitClosed:
 		return nil
 	}
-	
+
 	return nil
 }
 
 // RecordSuccess records a successful operation
 func (cb *CircuitBreaker) RecordSuccess() {
 	state := atomic.LoadInt32(&cb.state)
-	
+
 	if state == circuitHalfOpen {
 		cb.mu.Lock()
 		atomic.StoreInt32(&cb.state, circuitClosed)
@@ -199,11 +199,11 @@ func (cb *CircuitBreaker) RecordSuccess() {
 func (cb *CircuitBreaker) RecordFailure() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	state := atomic.LoadInt32(&cb.state)
 	failures := atomic.AddInt64(&cb.failureCount, 1)
 	cb.lastFailureTime = time.Now()
-	
+
 	if state == circuitHalfOpen {
 		// Immediately open on failure in half-open state
 		atomic.StoreInt32(&cb.state, circuitOpen)
@@ -239,12 +239,12 @@ func NewRateLimiter(config *GateConfig) *RateLimiter {
 		refillRate: 100,
 		lastRefill: time.Now(),
 	}
-	
+
 	if config != nil && config.MaxRequestsPerSecond > 0 {
 		rl.maxTokens = config.MaxRequestsPerSecond * 10 // 10 seconds worth
 		rl.refillRate = config.MaxRequestsPerSecond
 	}
-	
+
 	rl.tokens = rl.maxTokens
 	return rl
 }
@@ -253,22 +253,22 @@ func NewRateLimiter(config *GateConfig) *RateLimiter {
 func (rl *RateLimiter) Allow() error {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
-	
+
 	now := time.Now()
 	elapsed := now.Sub(rl.lastRefill)
-	
+
 	// Refill tokens
 	tokensToAdd := int64(elapsed.Seconds() * float64(rl.refillRate))
 	if tokensToAdd > 0 {
 		rl.tokens = min(rl.tokens+tokensToAdd, rl.maxTokens)
 		rl.lastRefill = now
 	}
-	
+
 	if rl.tokens > 0 {
 		rl.tokens--
 		return nil
 	}
-	
+
 	return ErrRateLimitExceeded
 }
 
@@ -277,11 +277,11 @@ func NewConnectionLimiter(config *GateConfig) *ConnectionLimiter {
 	cl := &ConnectionLimiter{
 		maxConnections: 100,
 	}
-	
+
 	if config != nil && config.MaxConcurrentConnections > 0 {
 		cl.maxConnections = config.MaxConcurrentConnections
 	}
-	
+
 	return cl
 }
 
@@ -289,11 +289,11 @@ func NewConnectionLimiter(config *GateConfig) *ConnectionLimiter {
 func (cl *ConnectionLimiter) Acquire() error {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	
+
 	if atomic.LoadInt64(&cl.currentConnections) >= cl.maxConnections {
 		return ErrConnectionLimit
 	}
-	
+
 	atomic.AddInt64(&cl.currentConnections, 1)
 	return nil
 }
@@ -315,20 +315,20 @@ func ExecuteWithGate[T any](
 	operation func(context.Context) (T, error),
 ) (T, error) {
 	var zero T
-	
+
 	// Check gate
 	if err := gate.Allow(ctx); err != nil {
 		return zero, err
 	}
-	
+
 	// Execute operation
 	result, err := operation(ctx)
-	
+
 	if err != nil {
 		gate.RecordFailure()
 		return zero, err
 	}
-	
+
 	gate.RecordSuccess()
 	return result, nil
 }

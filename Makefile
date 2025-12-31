@@ -18,9 +18,28 @@ test-coverage:
 build:
 	go build -v ./...
 
+# Check formatting
+fmt-check:
+	@if [ "$$(gofmt -l . | wc -l)" -gt 0 ]; then \
+		echo "Code is not formatted. Run 'make fmt'"; \
+		gofmt -d .; \
+		exit 1; \
+	fi
+
+# Format code
+fmt:
+	gofmt -w .
+
+# Run go vet
+vet:
+	go vet ./...
+
 # Run linter (requires golangci-lint)
 lint:
 	golangci-lint run
+
+# Run all linting checks
+lint-all: fmt-check vet lint
 
 # Clean build artifacts
 clean:
@@ -28,4 +47,4 @@ clean:
 	rm -f coverage.out coverage.html dbruntime
 
 # Run CI checks locally
-ci: test-race test-coverage lint build
+ci: fmt-check vet test-race test-coverage lint build

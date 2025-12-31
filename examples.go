@@ -27,7 +27,7 @@ func ExampleBasicUsage() {
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
-	defer runtime.Disconnect()
+	defer DisconnectWithLog(runtime)
 
 	ctx := context.Background()
 
@@ -49,7 +49,7 @@ func ExampleWithTransaction() {
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
-	defer runtime.Disconnect()
+	defer DisconnectWithLog(runtime)
 
 	ctx := context.Background()
 	executor := NewQueryExecutor(runtime)
@@ -83,7 +83,7 @@ func ExampleWithPreparedStatements() {
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
-	defer runtime.Disconnect()
+	defer DisconnectWithLog(runtime)
 
 	ctx := context.Background()
 
@@ -120,7 +120,7 @@ func ExampleWithMetrics() {
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
-	defer runtime.Disconnect()
+	defer DisconnectWithLog(runtime)
 
 	ctx := context.Background()
 
@@ -149,7 +149,7 @@ func ExampleWithHealthCheck() {
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
-	defer runtime.Disconnect()
+	defer DisconnectWithLog(runtime)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -174,7 +174,7 @@ func ExampleWithCircuitBreaker() {
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
-	defer runtime.Disconnect()
+	defer DisconnectWithLog(runtime)
 
 	ctx := context.Background()
 
@@ -203,7 +203,7 @@ func ExampleWithQueryExecutor() {
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
 	}
-	defer runtime.Disconnect()
+	defer DisconnectWithLog(runtime)
 
 	ctx := context.Background()
 	executor := NewQueryExecutor(runtime)

@@ -27,15 +27,15 @@ func (e *DatabaseError) Unwrap() error {
 
 // Error codes
 const (
-	ErrCodeConnectionFailed    = "CONNECTION_FAILED"
-	ErrCodeQueryFailed         = "QUERY_FAILED"
-	ErrCodeTransactionFailed   = "TRANSACTION_FAILED"
-	ErrCodeCircuitBreakerOpen  = "CIRCUIT_BREAKER_OPEN"
-	ErrCodeRateLimitExceeded   = "RATE_LIMIT_EXCEEDED"
-	ErrCodeConnectionLeak      = "CONNECTION_LEAK"
-	ErrCodeValidationFailed    = "VALIDATION_FAILED"
-	ErrCodeTimeout             = "TIMEOUT"
-	ErrCodeRetryExhausted      = "RETRY_EXHAUSTED"
+	ErrCodeConnectionFailed   = "CONNECTION_FAILED"
+	ErrCodeQueryFailed        = "QUERY_FAILED"
+	ErrCodeTransactionFailed  = "TRANSACTION_FAILED"
+	ErrCodeCircuitBreakerOpen = "CIRCUIT_BREAKER_OPEN"
+	ErrCodeRateLimitExceeded  = "RATE_LIMIT_EXCEEDED"
+	ErrCodeConnectionLeak     = "CONNECTION_LEAK"
+	ErrCodeValidationFailed   = "VALIDATION_FAILED"
+	ErrCodeTimeout            = "TIMEOUT"
+	ErrCodeRetryExhausted     = "RETRY_EXHAUSTED"
 )
 
 // NewDatabaseError creates a new database error

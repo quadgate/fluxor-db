@@ -28,23 +28,23 @@ func DefaultConfig() *RuntimeConfig {
 		MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 10),
 		ConnMaxLifetime: getEnvDuration("DB_CONN_MAX_LIFETIME", 30*time.Minute),
 		ConnMaxIdleTime: getEnvDuration("DB_CONN_MAX_IDLE_TIME", 10*time.Minute),
-		
+
 		// Advanced connection features
 		LeakDetectionThreshold: getEnvDuration("DB_LEAK_DETECTION_THRESHOLD", 10*time.Minute),
-		ValidationQuery:         getEnv("DB_VALIDATION_QUERY", "SELECT 1 FROM DUAL"),
-		ValidationTimeout:       getEnvDuration("DB_VALIDATION_TIMEOUT", 5*time.Second),
-		WarmupConnections:       getEnvInt("DB_WARMUP_CONNECTIONS", 5),
-		WarmupTimeout:           getEnvDuration("DB_WARMUP_TIMEOUT", 30*time.Second),
-		ConnectionTimeout:       getEnvDuration("DB_CONNECTION_TIMEOUT", 30*time.Second),
-		EnableLeakDetection:     getEnvBool("DB_ENABLE_LEAK_DETECTION", true),
-		
+		ValidationQuery:        getEnv("DB_VALIDATION_QUERY", "SELECT 1 FROM DUAL"),
+		ValidationTimeout:      getEnvDuration("DB_VALIDATION_TIMEOUT", 5*time.Second),
+		WarmupConnections:      getEnvInt("DB_WARMUP_CONNECTIONS", 5),
+		WarmupTimeout:          getEnvDuration("DB_WARMUP_TIMEOUT", 30*time.Second),
+		ConnectionTimeout:      getEnvDuration("DB_CONNECTION_TIMEOUT", 30*time.Second),
+		EnableLeakDetection:    getEnvBool("DB_ENABLE_LEAK_DETECTION", true),
+
 		// Circuit breaker settings
 		CircuitBreakerMaxFailures:     getEnvInt("DB_CB_MAX_FAILURES", 5),
 		CircuitBreakerResetTimeout:    getEnvDuration("DB_CB_RESET_TIMEOUT", 60*time.Second),
 		CircuitBreakerHalfOpenTimeout: getEnvDuration("DB_CB_HALF_OPEN_TIMEOUT", 10*time.Second),
 		MaxRequestsPerSecond:          getEnvInt64("DB_MAX_REQUESTS_PER_SEC", 1000),
 		MaxConcurrentConnections:      getEnvInt64("DB_MAX_CONCURRENT_CONNECTIONS", 100),
-		
+
 		// Query settings
 		StmtCacheSize:      getEnvInt("DB_STMT_CACHE_SIZE", 200),
 		SlowQueryThreshold: getEnvDuration("DB_SLOW_QUERY_THRESHOLD", 1*time.Second),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -69,11 +70,11 @@ func (qe *QueryExecutor) Transaction(ctx context.Context, fn func(*AdvancedTx) e
 
 // Diagnostics provides diagnostic information about the runtime
 type Diagnostics struct {
-	Runtime          *DBRuntime
-	ConnectionStats  sql.DBStats
-	Metrics          MetricsStats
-	CircuitBreaker   string
-	Timestamp        time.Time
+	Runtime         *DBRuntime
+	ConnectionStats sql.DBStats
+	Metrics         MetricsStats
+	CircuitBreaker  string
+	Timestamp       time.Time
 }
 
 // GetDiagnostics returns comprehensive diagnostic information
@@ -133,10 +134,10 @@ Performance Metrics:
 
 // HealthStatus represents the health status of the runtime
 type HealthStatus struct {
-	Healthy       bool
-	Message       string
-	LastCheck     time.Time
-	ConnectionOK  bool
+	Healthy          bool
+	Message          string
+	LastCheck        time.Time
+	ConnectionOK     bool
 	CircuitBreakerOK bool
 }
 
@@ -206,4 +207,12 @@ func WithRetry(ctx context.Context, maxRetries int, backoff time.Duration, fn fu
 	}
 
 	return fmt.Errorf("failed after %d attempts: %w", maxRetries+1, lastErr)
+}
+
+// DisconnectWithLog disconnects the runtime and logs any errors
+// This is a helper for defer statements where error checking is needed
+func DisconnectWithLog(runtime *DBRuntime) {
+	if err := runtime.Disconnect(); err != nil {
+		log.Printf("Error disconnecting database runtime: %v", err)
+	}
 }

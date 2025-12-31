@@ -11,24 +11,24 @@ import (
 
 // ConnectionManager handles advanced connection lifecycle management
 type ConnectionManager struct {
-	db              *sql.DB
-	config          *AdvancedConfig
-	mu              sync.RWMutex
+	db                *sql.DB
+	config            *AdvancedConfig
+	mu                sync.RWMutex
 	activeConnections map[uint64]*TrackedConnection
-	connectionID     uint64
-	leakDetector    *LeakDetector
-	validator       *ConnectionValidator
-	warmupDone      atomic.Bool
+	connectionID      uint64
+	leakDetector      *LeakDetector
+	validator         *ConnectionValidator
+	warmupDone        atomic.Bool
 }
 
 // TrackedConnection tracks individual connections for leak detection
 type TrackedConnection struct {
-	ID          uint64
-	AcquiredAt  time.Time
-	LastUsedAt  time.Time
-	QueryCount  int64
-	StackTrace  string
-	mu          sync.RWMutex
+	ID         uint64
+	AcquiredAt time.Time
+	LastUsedAt time.Time
+	QueryCount int64
+	StackTrace string
+	mu         sync.RWMutex
 }
 
 // LeakDetector monitors for connection leaks
@@ -49,32 +49,32 @@ type ConnectionValidator struct {
 
 // AdvancedConfig extends basic configuration with advanced features
 type AdvancedConfig struct {
-	DSN                string
-	MaxOpenConns       int
-	MaxIdleConns       int
-	ConnMaxLifetime    time.Duration
-	ConnMaxIdleTime    time.Duration
-	
+	DSN             string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
+
 	// Advanced features
 	LeakDetectionThreshold time.Duration
-	ValidationQuery         string
-	ValidationTimeout       time.Duration
-	WarmupConnections       int
-	WarmupTimeout           time.Duration
-	ConnectionTimeout       time.Duration
-	EnableMetrics           bool
-	EnableLeakDetection     bool
+	ValidationQuery        string
+	ValidationTimeout      time.Duration
+	WarmupConnections      int
+	WarmupTimeout          time.Duration
+	ConnectionTimeout      time.Duration
+	EnableMetrics          bool
+	EnableLeakDetection    bool
 }
 
 // NewConnectionManager creates a new advanced connection manager
 func NewConnectionManager(config *AdvancedConfig) *ConnectionManager {
 	cm := &ConnectionManager{
-		config:           config,
+		config:            config,
 		activeConnections: make(map[uint64]*TrackedConnection),
-		leakDetector:     NewLeakDetector(config),
-		validator:        NewConnectionValidator(config),
+		leakDetector:      NewLeakDetector(config),
+		validator:         NewConnectionValidator(config),
 	}
-	
+
 	// Set defaults
 	if config.MaxOpenConns == 0 {
 		config.MaxOpenConns = 25
@@ -100,7 +100,7 @@ func NewConnectionManager(config *AdvancedConfig) *ConnectionManager {
 	if config.ConnectionTimeout == 0 {
 		config.ConnectionTimeout = 30 * time.Second
 	}
-	
+
 	return cm
 }
 
@@ -108,44 +108,44 @@ func NewConnectionManager(config *AdvancedConfig) *ConnectionManager {
 func (cm *ConnectionManager) Open() error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	
+
 	if cm.db != nil {
 		return nil
 	}
-	
+
 	// Open database connection - godror handles Oracle-specific pooling
 	db, err := sql.Open("godror", cm.config.DSN)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
-	
+
 	// Configure connection pool
 	db.SetMaxOpenConns(cm.config.MaxOpenConns)
 	db.SetMaxIdleConns(cm.config.MaxIdleConns)
 	db.SetConnMaxLifetime(cm.config.ConnMaxLifetime)
 	db.SetConnMaxIdleTime(cm.config.ConnMaxIdleTime)
-	
+
 	// Validate initial connection
 	ctx, cancel := context.WithTimeout(context.Background(), cm.config.ConnectionTimeout)
 	defer cancel()
-	
+
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		return fmt.Errorf("failed to ping database: %w", err)
 	}
-	
+
 	cm.db = db
-	
+
 	// Start leak detection if enabled
 	if cm.config.EnableLeakDetection {
 		cm.leakDetector.Start(cm)
 	}
-	
+
 	// Warm up connections
 	if cm.config.WarmupConnections > 0 {
 		go cm.warmupConnections()
 	}
-	
+
 	return nil
 }
 
@@ -155,15 +155,15 @@ func (cm *ConnectionManager) warmupConnections() {
 		return
 	}
 	defer cm.warmupDone.Store(true)
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), cm.config.WarmupTimeout)
 	defer cancel()
-	
+
 	if cm.config.WarmupTimeout == 0 {
 		ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 	}
-	
+
 	// Create warmup connections
 	for i := 0; i < cm.config.WarmupConnections && i < cm.config.MaxIdleConns; i++ {
 		conn, err := cm.db.Conn(ctx)
@@ -179,12 +179,12 @@ func (cm *ConnectionManager) AcquireConnection(ctx context.Context) (*sql.Conn, 
 	if cm.db == nil {
 		return nil, fmt.Errorf("database not opened")
 	}
-	
+
 	conn, err := cm.db.Conn(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to acquire connection: %w", err)
 	}
-	
+
 	// Validate connection if validator is configured
 	if cm.validator != nil {
 		if err := cm.validator.Validate(ctx, conn); err != nil {
@@ -192,12 +192,12 @@ func (cm *ConnectionManager) AcquireConnection(ctx context.Context) (*sql.Conn, 
 			return nil, fmt.Errorf("connection validation failed: %w", err)
 		}
 	}
-	
+
 	// Track connection for leak detection
 	if cm.config.EnableLeakDetection {
 		cm.trackConnection(conn)
 	}
-	
+
 	return conn, nil
 }
 
@@ -205,14 +205,14 @@ func (cm *ConnectionManager) AcquireConnection(ctx context.Context) (*sql.Conn, 
 func (cm *ConnectionManager) trackConnection(conn *sql.Conn) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	
+
 	id := atomic.AddUint64(&cm.connectionID, 1)
 	tracked := &TrackedConnection{
 		ID:         id,
 		AcquiredAt: time.Now(),
 		LastUsedAt: time.Now(),
 	}
-	
+
 	cm.activeConnections[id] = tracked
 }
 
@@ -220,7 +220,7 @@ func (cm *ConnectionManager) trackConnection(conn *sql.Conn) {
 func (cm *ConnectionManager) ReleaseConnection(conn *sql.Conn) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	
+
 	// Remove from tracking (simplified - in real implementation would use connection ID)
 	conn.Close()
 }
@@ -229,18 +229,18 @@ func (cm *ConnectionManager) ReleaseConnection(conn *sql.Conn) {
 func (cm *ConnectionManager) Close() error {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-	
+
 	if cm.leakDetector != nil {
 		cm.leakDetector.Stop()
 	}
-	
+
 	if cm.db != nil {
 		if err := cm.db.Close(); err != nil {
 			return fmt.Errorf("failed to close database: %w", err)
 		}
 		cm.db = nil
 	}
-	
+
 	cm.activeConnections = make(map[uint64]*TrackedConnection)
 	return nil
 }
@@ -257,7 +257,7 @@ func NewLeakDetector(config *AdvancedConfig) *LeakDetector {
 	if !config.EnableLeakDetection {
 		return nil
 	}
-	
+
 	return &LeakDetector{
 		maxConnectionAge: config.LeakDetectionThreshold,
 		checkInterval:    30 * time.Second,
@@ -270,11 +270,11 @@ func (ld *LeakDetector) Start(cm *ConnectionManager) {
 	if ld == nil {
 		return
 	}
-	
+
 	go func() {
 		ticker := time.NewTicker(ld.checkInterval)
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ticker.C:
@@ -298,7 +298,7 @@ func (ld *LeakDetector) Stop() {
 func (ld *LeakDetector) checkLeaks(cm *ConnectionManager) {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
-	
+
 	now := time.Now()
 	for id, conn := range cm.activeConnections {
 		age := now.Sub(conn.AcquiredAt)
@@ -324,7 +324,7 @@ func NewConnectionValidator(config *AdvancedConfig) *ConnectionValidator {
 func (cv *ConnectionValidator) Validate(ctx context.Context, conn *sql.Conn) error {
 	ctx, cancel := context.WithTimeout(ctx, cv.timeout)
 	defer cancel()
-	
+
 	var lastErr error
 	for i := 0; i < cv.maxRetries; i++ {
 		var result int
@@ -335,6 +335,6 @@ func (cv *ConnectionValidator) Validate(ctx context.Context, conn *sql.Conn) err
 		lastErr = err
 		time.Sleep(cv.retryBackoff * time.Duration(i+1))
 	}
-	
+
 	return fmt.Errorf("validation failed after %d retries: %w", cv.maxRetries, lastErr)
 }
