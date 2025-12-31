@@ -13,7 +13,7 @@ type Monitor struct {
 	interval  time.Duration
 	stopChan  chan struct{}
 	callbacks []MonitorCallback
-	mu        sync.RWMutex
+	mu        sync.RWMutex // nolint:unused // Used for thread-safe callback management
 	running   bool
 }
 
@@ -140,7 +140,7 @@ func (m *Monitor) checkAndNotify(ctx context.Context) {
 	}
 
 	// Check circuit breaker state
-	if diagnostics.CircuitBreaker == "open" {
+	if diagnostics.CircuitBreaker == CircuitStateOpen {
 		cbEvent := MonitorEvent{
 			Type:        "circuit_breaker_open",
 			Timestamp:   time.Now(),

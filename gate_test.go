@@ -49,9 +49,9 @@ func TestConnectionGate_State(t *testing.T) {
 	state := gate.State()
 
 	validStates := map[string]bool{
-		"closed":    true,
-		"open":      true,
-		"half-open": true,
+		CircuitStateClosed:   true,
+		CircuitStateOpen:     true,
+		CircuitStateHalfOpen: true,
 	}
 
 	if !validStates[state] {
@@ -81,7 +81,7 @@ func TestConnectionGate_RecordFailure(t *testing.T) {
 
 	// Circuit breaker should be open after max failures
 	state := gate.State()
-	if state != "open" {
+	if state != CircuitStateOpen {
 		t.Errorf("Expected circuit breaker to be open, got %s", state)
 	}
 }
@@ -91,7 +91,8 @@ func TestCircuitBreaker_Allow(t *testing.T) {
 		MaxFailures: 3,
 	})
 
-	err := cb.Allow()
+	ctx := context.Background()
+	err := cb.Allow(ctx)
 	if err != nil {
 		t.Errorf("Allow() should succeed when closed, got error: %v", err)
 	}
@@ -104,12 +105,12 @@ func TestCircuitBreaker_RecordFailure(t *testing.T) {
 
 	// Record failures
 	cb.RecordFailure()
-	if cb.State() != "closed" {
+	if cb.State() != CircuitStateClosed {
 		t.Error("Circuit breaker should still be closed after one failure")
 	}
 
 	cb.RecordFailure()
-	if cb.State() != "open" {
+	if cb.State() != CircuitStateOpen {
 		t.Error("Circuit breaker should be open after max failures")
 	}
 }

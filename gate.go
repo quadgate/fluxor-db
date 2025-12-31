@@ -8,6 +8,12 @@ import (
 	"time"
 )
 
+const (
+	CircuitStateClosed   = "closed"
+	CircuitStateOpen     = "open"
+	CircuitStateHalfOpen = "half-open"
+)
+
 var (
 	ErrCircuitOpen       = errors.New("circuit breaker is open")
 	ErrRateLimitExceeded = errors.New("rate limit exceeded")
@@ -82,7 +88,7 @@ type GateConfig struct {
 // Allow checks if a connection request should be allowed
 func (cg *ConnectionGate) Allow(ctx context.Context) error {
 	// Check circuit breaker
-	if err := cg.circuitBreaker.Allow(); err != nil {
+	if err := cg.circuitBreaker.Allow(ctx); err != nil {
 		return err
 	}
 
@@ -147,7 +153,7 @@ func NewCircuitBreaker(config *GateConfig) *CircuitBreaker {
 }
 
 // Allow checks if the circuit breaker allows the operation
-func (cb *CircuitBreaker) Allow() error {
+func (cb *CircuitBreaker) Allow(_ context.Context) error {
 	cb.mu.RLock()
 	state := atomic.LoadInt32(&cb.state)
 	cb.mu.RUnlock()
@@ -160,7 +166,7 @@ func (cb *CircuitBreaker) Allow() error {
 			atomic.StoreInt32(&cb.state, circuitHalfOpen)
 			atomic.StoreInt64(&cb.failureCount, 0)
 			if cb.onStateChange != nil {
-				cb.onStateChange("open", "half-open")
+				cb.onStateChange(CircuitStateOpen, CircuitStateHalfOpen)
 			}
 			cb.mu.Unlock()
 			return nil
@@ -187,7 +193,7 @@ func (cb *CircuitBreaker) RecordSuccess() {
 		atomic.StoreInt32(&cb.state, circuitClosed)
 		atomic.StoreInt64(&cb.failureCount, 0)
 		if cb.onStateChange != nil {
-			cb.onStateChange("half-open", "closed")
+			cb.onStateChange(CircuitStateHalfOpen, CircuitStateClosed)
 		}
 		cb.mu.Unlock()
 	} else if state == circuitClosed {
@@ -208,12 +214,12 @@ func (cb *CircuitBreaker) RecordFailure() {
 		// Immediately open on failure in half-open state
 		atomic.StoreInt32(&cb.state, circuitOpen)
 		if cb.onStateChange != nil {
-			cb.onStateChange("half-open", "open")
+			cb.onStateChange(CircuitStateHalfOpen, CircuitStateOpen)
 		}
 	} else if state == circuitClosed && int(failures) >= cb.maxFailures {
 		atomic.StoreInt32(&cb.state, circuitOpen)
 		if cb.onStateChange != nil {
-			cb.onStateChange("closed", "open")
+			cb.onStateChange(CircuitStateClosed, CircuitStateOpen)
 		}
 	}
 }
@@ -223,11 +229,11 @@ func (cb *CircuitBreaker) State() string {
 	state := atomic.LoadInt32(&cb.state)
 	switch state {
 	case circuitClosed:
-		return "closed"
+		return CircuitStateClosed
 	case circuitOpen:
-		return "open"
+		return CircuitStateOpen
 	case circuitHalfOpen:
-		return "half-open"
+		return CircuitStateHalfOpen
 	}
 	return "unknown"
 }

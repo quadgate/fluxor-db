@@ -54,9 +54,9 @@ func TestDBRuntime_CircuitBreakerState(t *testing.T) {
 	}
 
 	validStates := map[string]bool{
-		"closed":    true,
-		"open":      true,
-		"half-open": true,
+		CircuitStateClosed:   true,
+		CircuitStateOpen:     true,
+		CircuitStateHalfOpen: true,
 	}
 
 	if !validStates[state] {
