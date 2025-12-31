@@ -4,138 +4,152 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"sync"
 	"time"
-
-	_ "github.com/godror/godror"
 )
 
-// DBRuntime manages database connections and provides runtime services
+// DBRuntime is an advanced Oracle database runtime that exceeds HikariCP capabilities
 type DBRuntime struct {
-	db        *sql.DB
-	config    *DBConfig
-	mu        sync.RWMutex
-	ctx       context.Context
-	cancel    context.CancelFunc
-	connected bool
+	connManager *ConnectionManager
+	gate        *ConnectionGate
+	advancedDB  *AdvancedDB
+	config      *RuntimeConfig
 }
 
-// DBConfig holds database configuration
-type DBConfig struct {
-	DSN          string
-	MaxOpenConns int
-	MaxIdleConns int
-	ConnMaxLifetime time.Duration
-	ConnMaxIdleTime time.Duration
-}
-
-// NewDBRuntime creates a new database runtime instance
-func NewDBRuntime(config *DBConfig) *DBRuntime {
-	ctx, cancel := context.WithCancel(context.Background())
+// RuntimeConfig configures the entire database runtime
+type RuntimeConfig struct {
+	// Connection configuration
+	DSN                string
+	MaxOpenConns       int
+	MaxIdleConns       int
+	ConnMaxLifetime    time.Duration
+	ConnMaxIdleTime    time.Duration
 	
-	if config.MaxOpenConns == 0 {
-		config.MaxOpenConns = 25
-	}
-	if config.MaxIdleConns == 0 {
-		config.MaxIdleConns = 5
-	}
-	if config.ConnMaxLifetime == 0 {
-		config.ConnMaxLifetime = 5 * time.Minute
-	}
-	if config.ConnMaxIdleTime == 0 {
-		config.ConnMaxIdleTime = 10 * time.Minute
-	}
-
-	return &DBRuntime{
-		config:    config,
-		ctx:       ctx,
-		cancel:    cancel,
-		connected: false,
-	}
+	// Advanced connection features
+	LeakDetectionThreshold time.Duration
+	ValidationQuery         string
+	ValidationTimeout       time.Duration
+	WarmupConnections       int
+	WarmupTimeout           time.Duration
+	ConnectionTimeout       time.Duration
+	EnableLeakDetection     bool
+	
+	// Gate configuration
+	CircuitBreakerMaxFailures     int
+	CircuitBreakerResetTimeout    time.Duration
+	CircuitBreakerHalfOpenTimeout time.Duration
+	MaxRequestsPerSecond          int64
+	MaxConcurrentConnections      int64
+	
+	// Database operation configuration
+	StmtCacheSize      int
+	SlowQueryThreshold time.Duration
+	QueryTimeout       time.Duration
+	MaxRetries         int
+	RetryBackoff       time.Duration
 }
 
-// Connect establishes a connection to the database
+// NewDBRuntime creates a new advanced database runtime
+func NewDBRuntime(config *RuntimeConfig) *DBRuntime {
+	if config == nil {
+		config = &RuntimeConfig{}
+	}
+	
+	// Create connection manager
+	connConfig := &AdvancedConfig{
+		DSN:                    config.DSN,
+		MaxOpenConns:           config.MaxOpenConns,
+		MaxIdleConns:           config.MaxIdleConns,
+		ConnMaxLifetime:        config.ConnMaxLifetime,
+		ConnMaxIdleTime:        config.ConnMaxIdleTime,
+		LeakDetectionThreshold: config.LeakDetectionThreshold,
+		ValidationQuery:        config.ValidationQuery,
+		ValidationTimeout:      config.ValidationTimeout,
+		WarmupConnections:      config.WarmupConnections,
+		WarmupTimeout:          config.WarmupTimeout,
+		ConnectionTimeout:      config.ConnectionTimeout,
+		EnableLeakDetection:    config.EnableLeakDetection,
+	}
+	
+	connManager := NewConnectionManager(connConfig)
+	
+	// Create connection gate
+	gateConfig := &GateConfig{
+		MaxFailures:              config.CircuitBreakerMaxFailures,
+		ResetTimeout:             config.CircuitBreakerResetTimeout,
+		HalfOpenTimeout:          config.CircuitBreakerHalfOpenTimeout,
+		MaxRequestsPerSecond:     config.MaxRequestsPerSecond,
+		MaxConcurrentConnections: config.MaxConcurrentConnections,
+	}
+	
+	gate := NewConnectionGate(gateConfig)
+	
+	// AdvancedDB will be created after connection is opened
+	runtime := &DBRuntime{
+		connManager: connManager,
+		gate:        gate,
+		config:      config,
+	}
+	
+	return runtime
+}
+
+// Connect establishes connection to the database
 func (r *DBRuntime) Connect() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.connected {
-		return nil
+	if err := r.connManager.Open(); err != nil {
+		return fmt.Errorf("failed to open connection: %w", err)
 	}
-
-	db, err := sql.Open("godror", r.config.DSN)
-	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
+	
+	// Create advanced DB wrapper
+	dbConfig := &DBAdvancedConfig{
+		StmtCacheSize:      r.config.StmtCacheSize,
+		SlowQueryThreshold: r.config.SlowQueryThreshold,
+		QueryTimeout:       r.config.QueryTimeout,
+		MaxRetries:         r.config.MaxRetries,
+		RetryBackoff:       r.config.RetryBackoff,
 	}
-
-	// Configure connection pool
-	db.SetMaxOpenConns(r.config.MaxOpenConns)
-	db.SetMaxIdleConns(r.config.MaxIdleConns)
-	db.SetConnMaxLifetime(r.config.ConnMaxLifetime)
-	db.SetConnMaxIdleTime(r.config.ConnMaxIdleTime)
-
-	// Test the connection
-	ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
-	defer cancel()
-
-	if err := db.PingContext(ctx); err != nil {
-		db.Close()
-		return fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	r.db = db
-	r.connected = true
+	
+	r.advancedDB = NewAdvancedDB(r.connManager.DB(), r.gate, dbConfig)
+	
 	return nil
 }
 
-// Disconnect closes the database connection
+// Disconnect closes all connections and cleans up resources
 func (r *DBRuntime) Disconnect() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if !r.connected {
-		return nil
+	if r.advancedDB != nil && r.advancedDB.stmtCache != nil {
+		r.advancedDB.stmtCache.Clear()
 	}
-
-	r.cancel()
-	if r.db != nil {
-		if err := r.db.Close(); err != nil {
-			return fmt.Errorf("failed to close database: %w", err)
-		}
-	}
-
-	r.connected = false
-	return nil
+	return r.connManager.Close()
 }
 
-// DB returns the underlying database connection
+// DB returns the underlying sql.DB connection pool
 func (r *DBRuntime) DB() *sql.DB {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.db
+	return r.connManager.DB()
 }
 
-// IsConnected returns whether the runtime is connected to the database
+// AdvancedDB returns the advanced database wrapper
+func (r *DBRuntime) AdvancedDB() *AdvancedDB {
+	return r.advancedDB
+}
+
+// IsConnected returns whether the runtime is connected
 func (r *DBRuntime) IsConnected() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.connected
+	return r.connManager.db != nil
 }
 
-// Exec executes a query without returning rows
+// Exec executes a query without returning rows (with all advanced features)
 func (r *DBRuntime) Exec(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	if !r.IsConnected() {
 		return nil, fmt.Errorf("database not connected")
 	}
-	return r.db.ExecContext(ctx, query, args...)
+	return r.advancedDB.Exec(ctx, query, args...)
 }
 
-// Query executes a query that returns rows
+// Query executes a query that returns rows (with all advanced features)
 func (r *DBRuntime) Query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	if !r.IsConnected() {
 		return nil, fmt.Errorf("database not connected")
 	}
-	return r.db.QueryContext(ctx, query, args...)
+	return r.advancedDB.Query(ctx, query, args...)
 }
 
 // QueryRow executes a query that returns at most one row
@@ -143,25 +157,39 @@ func (r *DBRuntime) QueryRow(ctx context.Context, query string, args ...interfac
 	if !r.IsConnected() {
 		return nil
 	}
-	return r.db.QueryRowContext(ctx, query, args...)
+	return r.advancedDB.QueryRow(ctx, query, args...)
 }
 
-// Begin starts a new transaction
-func (r *DBRuntime) Begin(ctx context.Context) (*sql.Tx, error) {
+// Prepare creates or retrieves a cached prepared statement
+func (r *DBRuntime) Prepare(ctx context.Context, query string) (*sql.Stmt, error) {
 	if !r.IsConnected() {
 		return nil, fmt.Errorf("database not connected")
 	}
-	return r.db.BeginTx(ctx, nil)
+	return r.advancedDB.Prepare(ctx, query)
 }
 
-// Stats returns database connection pool statistics
+// Begin starts a new transaction
+func (r *DBRuntime) Begin(ctx context.Context, opts *sql.TxOptions) (*AdvancedTx, error) {
+	if !r.IsConnected() {
+		return nil, fmt.Errorf("database not connected")
+	}
+	return r.advancedDB.Begin(ctx, opts)
+}
+
+// Stats returns connection pool statistics
 func (r *DBRuntime) Stats() sql.DBStats {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if r.db == nil {
+	if !r.IsConnected() {
 		return sql.DBStats{}
 	}
-	return r.db.Stats()
+	return r.advancedDB.Stats()
+}
+
+// Metrics returns performance metrics
+func (r *DBRuntime) Metrics() MetricsStats {
+	if !r.IsConnected() {
+		return MetricsStats{}
+	}
+	return r.advancedDB.Metrics().GetStats()
 }
 
 // HealthCheck performs a health check on the database connection
@@ -169,19 +197,52 @@ func (r *DBRuntime) HealthCheck(ctx context.Context) error {
 	if !r.IsConnected() {
 		return fmt.Errorf("database not connected")
 	}
-	return r.db.PingContext(ctx)
+	return r.advancedDB.HealthCheck(ctx)
 }
 
-// Example usage
+// CircuitBreakerState returns the current circuit breaker state
+func (r *DBRuntime) CircuitBreakerState() string {
+	return r.gate.State()
+}
+
+// Example usage demonstrating advanced features
 func main() {
-	// Create a new database runtime with configuration
-	config := &DBConfig{
-		DSN: "user/password@localhost:1521/XE", // Example Oracle DSN
+	// Create runtime with advanced configuration
+	config := &RuntimeConfig{
+		// Basic connection settings
+		DSN:             "user/password@localhost:1521/XE",
+		MaxOpenConns:    50,
+		MaxIdleConns:    10,
+		ConnMaxLifetime: 30 * time.Minute,
+		ConnMaxIdleTime: 10 * time.Minute,
+		
+		// Advanced connection features
+		LeakDetectionThreshold: 10 * time.Minute,
+		ValidationQuery:         "SELECT 1 FROM DUAL",
+		ValidationTimeout:       5 * time.Second,
+		WarmupConnections:       5,
+		WarmupTimeout:           30 * time.Second,
+		ConnectionTimeout:       30 * time.Second,
+		EnableLeakDetection:     true,
+		
+		// Circuit breaker settings
+		CircuitBreakerMaxFailures:     5,
+		CircuitBreakerResetTimeout:    60 * time.Second,
+		CircuitBreakerHalfOpenTimeout: 10 * time.Second,
+		MaxRequestsPerSecond:          1000,
+		MaxConcurrentConnections:      100,
+		
+		// Query settings
+		StmtCacheSize:      200,
+		SlowQueryThreshold: 1 * time.Second,
+		QueryTimeout:       30 * time.Second,
+		MaxRetries:         3,
+		RetryBackoff:       100 * time.Millisecond,
 	}
 	
 	runtime := NewDBRuntime(config)
 	
-	// Connect to the database
+	// Connect to database
 	if err := runtime.Connect(); err != nil {
 		fmt.Printf("Failed to connect: %v\n", err)
 		return
@@ -195,6 +256,17 @@ func main() {
 		return
 	}
 	
-	fmt.Println("Database runtime is ready!")
-	fmt.Printf("Connection stats: %+v\n", runtime.Stats())
+	fmt.Println("Advanced Oracle Database Runtime is ready!")
+	fmt.Printf("Circuit Breaker State: %s\n", runtime.CircuitBreakerState())
+	fmt.Printf("Connection Stats: %+v\n", runtime.Stats())
+	
+	// Example query execution
+	result, err := runtime.Exec(ctx, "SELECT 1 FROM DUAL")
+	if err != nil {
+		fmt.Printf("Query failed: %v\n", err)
+		return
+	}
+	
+	fmt.Printf("Query executed successfully: %+v\n", result)
+	fmt.Printf("Performance Metrics: %+v\n", runtime.Metrics())
 }
