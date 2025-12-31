@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -206,4 +207,12 @@ func WithRetry(ctx context.Context, maxRetries int, backoff time.Duration, fn fu
 	}
 
 	return fmt.Errorf("failed after %d attempts: %w", maxRetries+1, lastErr)
+}
+
+// DisconnectWithLog disconnects the runtime and logs any errors
+// This is a helper for defer statements where error checking is needed
+func DisconnectWithLog(runtime *DBRuntime) {
+	if err := runtime.Disconnect(); err != nil {
+		log.Printf("Error disconnecting database runtime: %v", err)
+	}
 }

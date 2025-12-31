@@ -11,6 +11,7 @@ linters-settings:
   errcheck:
     check-type-assertions: true
     check-blank: true
+    check-err-return: true
   
   goconst:
     min-len: 2

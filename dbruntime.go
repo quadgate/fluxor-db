@@ -247,7 +247,7 @@ func main() {
 		fmt.Printf("Failed to connect: %v\n", err)
 		return
 	}
-	defer runtime.Disconnect()
+	defer DisconnectWithLog(runtime)
 
 	// Perform health check
 	ctx := context.Background()
