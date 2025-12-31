@@ -65,7 +65,7 @@ func TestDiagnostics_String(t *testing.T) {
 	}
 
 	for _, field := range expectedFields {
-		if len(str) > 0 && len(field) > 0 {
+		if str != "" && field != "" {
 			// Just verify string is not empty and contains some content
 		}
 	}

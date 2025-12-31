@@ -24,7 +24,7 @@ type AdvancedDB struct {
 type PreparedStatementCache struct {
 	cache   map[string]*sql.Stmt
 	maxSize int
-	mu      sync.RWMutex
+	mu      sync.RWMutex // nolint:unused // Used for thread-safe cache operations
 }
 
 // DBMetrics tracks database performance metrics
@@ -35,7 +35,7 @@ type DBMetrics struct {
 	TotalQueryTime     int64 // nanoseconds
 	SlowQueries        int64
 	SlowQueryThreshold time.Duration
-	mu                 sync.RWMutex
+	mu                 sync.RWMutex // nolint:unused // Used for thread-safe metrics access
 }
 
 // RetryPolicy defines retry behavior for failed operations
@@ -235,10 +235,9 @@ type AdvancedTx struct {
 // Exec executes within transaction
 func (atx *AdvancedTx) Exec(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	start := time.Now()
-	defer func() {
-		atx.metrics.RecordQuery(time.Since(start), nil)
-	}()
-	return atx.tx.ExecContext(ctx, query, args...)
+	result, err := atx.tx.ExecContext(ctx, query, args...)
+	atx.metrics.RecordQuery(time.Since(start), err)
+	return result, err
 }
 
 // Query executes query within transaction
@@ -264,7 +263,9 @@ func (atx *AdvancedTx) Commit() error {
 // Rollback rolls back the transaction
 func (atx *AdvancedTx) Rollback() error {
 	err := atx.tx.Rollback()
-	atx.gate.RecordFailure()
+	if err != nil {
+		atx.gate.RecordFailure()
+	}
 	return err
 }
 

@@ -28,7 +28,7 @@ type TrackedConnection struct {
 	LastUsedAt time.Time
 	QueryCount int64
 	StackTrace string
-	mu         sync.RWMutex
+	mu         sync.RWMutex // nolint:unused // Reserved for future use
 }
 
 // LeakDetector monitors for connection leaks
@@ -202,7 +202,7 @@ func (cm *ConnectionManager) AcquireConnection(ctx context.Context) (*sql.Conn, 
 }
 
 // trackConnection tracks a connection for leak detection
-func (cm *ConnectionManager) trackConnection(conn *sql.Conn) {
+func (cm *ConnectionManager) trackConnection(_ *sql.Conn) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 

@@ -113,7 +113,7 @@ func (er *ErrorRecovery) HandleError(ctx context.Context, err error) error {
 	if IsCircuitBreakerError(err) {
 		// Wait for circuit breaker to potentially recover
 		time.Sleep(1 * time.Second)
-		if er.runtime.CircuitBreakerState() != "open" {
+		if er.runtime.CircuitBreakerState() != CircuitStateOpen {
 			return nil // Circuit breaker recovered
 		}
 		return err

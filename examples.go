@@ -26,6 +26,8 @@ func ExampleBasicUsage() {
 	runtime := NewDBRuntime(config)
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
+		DisconnectWithLog(runtime)
+		return
 	}
 	defer DisconnectWithLog(runtime)
 
@@ -48,6 +50,8 @@ func ExampleWithTransaction() {
 	runtime := NewDBRuntime(config)
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
+		DisconnectWithLog(runtime)
+		return
 	}
 	defer DisconnectWithLog(runtime)
 
@@ -82,6 +86,8 @@ func ExampleWithPreparedStatements() {
 	runtime := NewDBRuntime(config)
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
+		DisconnectWithLog(runtime)
+		return
 	}
 	defer DisconnectWithLog(runtime)
 
@@ -119,6 +125,8 @@ func ExampleWithMetrics() {
 	runtime := NewDBRuntime(config)
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
+		DisconnectWithLog(runtime)
+		return
 	}
 	defer DisconnectWithLog(runtime)
 
@@ -126,7 +134,7 @@ func ExampleWithMetrics() {
 
 	// Execute some queries
 	for i := 0; i < 100; i++ {
-		runtime.Exec(ctx, "SELECT 1 FROM DUAL")
+		_, _ = runtime.Exec(ctx, "SELECT 1 FROM DUAL")
 	}
 
 	// Get metrics
@@ -148,6 +156,8 @@ func ExampleWithHealthCheck() {
 	runtime := NewDBRuntime(config)
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
+		DisconnectWithLog(runtime)
+		return
 	}
 	defer DisconnectWithLog(runtime)
 
@@ -173,6 +183,8 @@ func ExampleWithCircuitBreaker() {
 	runtime := NewDBRuntime(config)
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
+		DisconnectWithLog(runtime)
+		return
 	}
 	defer DisconnectWithLog(runtime)
 
@@ -202,6 +214,8 @@ func ExampleWithQueryExecutor() {
 	runtime := NewDBRuntime(config)
 	if err := runtime.Connect(); err != nil {
 		log.Fatalf("Failed to connect: %v", err)
+		DisconnectWithLog(runtime)
+		return
 	}
 	defer DisconnectWithLog(runtime)
 

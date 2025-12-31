@@ -55,10 +55,10 @@ func (qe *QueryExecutor) Transaction(ctx context.Context, fn func(*AdvancedTx) e
 
 	defer func() {
 		if p := recover(); p != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			panic(p)
 		} else if err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 		} else {
 			err = tx.Commit()
 		}
@@ -158,7 +158,7 @@ func CheckHealth(ctx context.Context, runtime *DBRuntime) *HealthStatus {
 
 	// Check circuit breaker
 	cbState := runtime.CircuitBreakerState()
-	if cbState == "open" {
+	if cbState == CircuitStateOpen {
 		status.CircuitBreakerOK = false
 		status.Message = "Circuit breaker is open"
 		status.Healthy = false
