@@ -29,11 +29,14 @@ linters-settings:
   goimports:
     local-prefixes: dbruntime
   
+  govet:
+    enable:
+      - shadow
+  
   revive:
     rules:
       - name: exported
         severity: warning
-  
   
   misspell:
     locale: US
@@ -56,7 +59,6 @@ linters:
     - revive
     - gosec
     - govet
-    - shadow
     - ineffassign
     - misspell
     - nakedret
