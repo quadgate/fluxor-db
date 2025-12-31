@@ -9,10 +9,10 @@ import (
 
 func TestNewConnectionGate(t *testing.T) {
 	config := &GateConfig{
-		MaxFailures:     5,
-		ResetTimeout:    60 * time.Second,
-		HalfOpenTimeout: 10 * time.Second,
-		MaxRequestsPerSecond: 1000,
+		MaxFailures:              5,
+		ResetTimeout:             60 * time.Second,
+		HalfOpenTimeout:          10 * time.Second,
+		MaxRequestsPerSecond:     1000,
 		MaxConcurrentConnections: 100,
 	}
 

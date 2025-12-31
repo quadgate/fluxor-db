@@ -11,13 +11,13 @@ import (
 
 // AdvancedDB provides advanced database operations beyond standard sql.DB
 type AdvancedDB struct {
-	db              *sql.DB
-	gate            *ConnectionGate
-	stmtCache       *PreparedStatementCache
-	metrics         *DBMetrics
-	retryPolicy     *RetryPolicy
-	queryTimeout    time.Duration
-	mu              sync.RWMutex
+	db           *sql.DB
+	gate         *ConnectionGate
+	stmtCache    *PreparedStatementCache
+	metrics      *DBMetrics
+	retryPolicy  *RetryPolicy
+	queryTimeout time.Duration
+	mu           sync.RWMutex
 }
 
 // PreparedStatementCache caches prepared statements for performance
@@ -40,11 +40,11 @@ type DBMetrics struct {
 
 // RetryPolicy defines retry behavior for failed operations
 type RetryPolicy struct {
-	MaxRetries      int
-	InitialBackoff  time.Duration
-	MaxBackoff      time.Duration
+	MaxRetries        int
+	InitialBackoff    time.Duration
+	MaxBackoff        time.Duration
 	BackoffMultiplier float64
-	RetryableErrors []error
+	RetryableErrors   []error
 }
 
 // NewAdvancedDB creates a new advanced database wrapper
@@ -57,13 +57,13 @@ func NewAdvancedDB(db *sql.DB, gate *ConnectionGate, config *DBAdvancedConfig) *
 		retryPolicy:  NewRetryPolicy(config),
 		queryTimeout: 30 * time.Second,
 	}
-	
+
 	if config != nil {
 		if config.QueryTimeout > 0 {
 			adb.queryTimeout = config.QueryTimeout
 		}
 	}
-	
+
 	return adb
 }
 
@@ -82,11 +82,11 @@ func (adb *AdvancedDB) Exec(ctx context.Context, query string, args ...interface
 	defer func() {
 		adb.metrics.RecordQuery(time.Since(start), nil)
 	}()
-	
+
 	// Apply query timeout
 	ctx, cancel := context.WithTimeout(ctx, adb.queryTimeout)
 	defer cancel()
-	
+
 	// Execute with gate protection and retry
 	return ExecuteWithGate(adb.gate, ctx, func(ctx context.Context) (sql.Result, error) {
 		return adb.retryExec(ctx, query, args...)
@@ -97,7 +97,7 @@ func (adb *AdvancedDB) Exec(ctx context.Context, query string, args ...interface
 func (adb *AdvancedDB) retryExec(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	var lastErr error
 	backoff := adb.retryPolicy.InitialBackoff
-	
+
 	for attempt := 0; attempt <= adb.retryPolicy.MaxRetries; attempt++ {
 		if attempt > 0 {
 			select {
@@ -110,18 +110,18 @@ func (adb *AdvancedDB) retryExec(ctx context.Context, query string, args ...inte
 				backoff = adb.retryPolicy.MaxBackoff
 			}
 		}
-		
+
 		result, err := adb.db.ExecContext(ctx, query, args...)
 		if err == nil {
 			return result, nil
 		}
-		
+
 		lastErr = err
 		if !adb.retryPolicy.ShouldRetry(err) {
 			break
 		}
 	}
-	
+
 	return nil, fmt.Errorf("exec failed after %d attempts: %w", adb.retryPolicy.MaxRetries+1, lastErr)
 }
 
@@ -131,10 +131,10 @@ func (adb *AdvancedDB) Query(ctx context.Context, query string, args ...interfac
 	defer func() {
 		adb.metrics.RecordQuery(time.Since(start), nil)
 	}()
-	
+
 	ctx, cancel := context.WithTimeout(ctx, adb.queryTimeout)
 	defer cancel()
-	
+
 	return ExecuteWithGate(adb.gate, ctx, func(ctx context.Context) (*sql.Rows, error) {
 		return adb.retryQuery(ctx, query, args...)
 	})
@@ -144,7 +144,7 @@ func (adb *AdvancedDB) Query(ctx context.Context, query string, args ...interfac
 func (adb *AdvancedDB) retryQuery(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	var lastErr error
 	backoff := adb.retryPolicy.InitialBackoff
-	
+
 	for attempt := 0; attempt <= adb.retryPolicy.MaxRetries; attempt++ {
 		if attempt > 0 {
 			select {
@@ -157,18 +157,18 @@ func (adb *AdvancedDB) retryQuery(ctx context.Context, query string, args ...int
 				backoff = adb.retryPolicy.MaxBackoff
 			}
 		}
-		
+
 		rows, err := adb.db.QueryContext(ctx, query, args...)
 		if err == nil {
 			return rows, nil
 		}
-		
+
 		lastErr = err
 		if !adb.retryPolicy.ShouldRetry(err) {
 			break
 		}
 	}
-	
+
 	return nil, fmt.Errorf("query failed after %d attempts: %w", adb.retryPolicy.MaxRetries+1, lastErr)
 }
 
@@ -178,10 +178,10 @@ func (adb *AdvancedDB) QueryRow(ctx context.Context, query string, args ...inter
 	defer func() {
 		adb.metrics.RecordQuery(time.Since(start), nil)
 	}()
-	
+
 	ctx, cancel := context.WithTimeout(ctx, adb.queryTimeout)
 	defer cancel()
-	
+
 	// Note: QueryRow doesn't return error immediately, so we can't use gate here
 	// But we can still track metrics
 	return adb.db.QueryRowContext(ctx, query, args...)
@@ -193,13 +193,13 @@ func (adb *AdvancedDB) Prepare(ctx context.Context, query string) (*sql.Stmt, er
 	if stmt := adb.stmtCache.Get(query); stmt != nil {
 		return stmt, nil
 	}
-	
+
 	// Create new prepared statement
 	stmt, err := adb.db.PrepareContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Cache it
 	adb.stmtCache.Put(query, stmt)
 	return stmt, nil
@@ -209,15 +209,15 @@ func (adb *AdvancedDB) Prepare(ctx context.Context, query string) (*sql.Stmt, er
 func (adb *AdvancedDB) Begin(ctx context.Context, opts *sql.TxOptions) (*AdvancedTx, error) {
 	ctx, cancel := context.WithTimeout(ctx, adb.queryTimeout)
 	defer cancel()
-	
+
 	tx, err := ExecuteWithGate(adb.gate, ctx, func(ctx context.Context) (*sql.Tx, error) {
 		return adb.db.BeginTx(ctx, opts)
 	})
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &AdvancedTx{
 		tx:      tx,
 		gate:    adb.gate,
@@ -291,7 +291,7 @@ func NewPreparedStatementCache(config *DBAdvancedConfig) *PreparedStatementCache
 	if config != nil && config.StmtCacheSize > 0 {
 		maxSize = config.StmtCacheSize
 	}
-	
+
 	return &PreparedStatementCache{
 		cache:   make(map[string]*sql.Stmt),
 		maxSize: maxSize,
@@ -309,7 +309,7 @@ func (psc *PreparedStatementCache) Get(query string) *sql.Stmt {
 func (psc *PreparedStatementCache) Put(query string, stmt *sql.Stmt) {
 	psc.mu.Lock()
 	defer psc.mu.Unlock()
-	
+
 	if len(psc.cache) >= psc.maxSize {
 		// Evict oldest (simple FIFO - in production use LRU)
 		for k := range psc.cache {
@@ -317,7 +317,7 @@ func (psc *PreparedStatementCache) Put(query string, stmt *sql.Stmt) {
 			break
 		}
 	}
-	
+
 	psc.cache[query] = stmt
 }
 
@@ -325,7 +325,7 @@ func (psc *PreparedStatementCache) Put(query string, stmt *sql.Stmt) {
 func (psc *PreparedStatementCache) Clear() {
 	psc.mu.Lock()
 	defer psc.mu.Unlock()
-	
+
 	for _, stmt := range psc.cache {
 		stmt.Close()
 	}
@@ -338,7 +338,7 @@ func NewDBMetrics(config *DBAdvancedConfig) *DBMetrics {
 	if config != nil && config.SlowQueryThreshold > 0 {
 		threshold = config.SlowQueryThreshold
 	}
-	
+
 	return &DBMetrics{
 		SlowQueryThreshold: threshold,
 	}
@@ -348,13 +348,13 @@ func NewDBMetrics(config *DBAdvancedConfig) *DBMetrics {
 func (m *DBMetrics) RecordQuery(duration time.Duration, err error) {
 	atomic.AddInt64(&m.TotalQueries, 1)
 	atomic.AddInt64(&m.TotalQueryTime, int64(duration))
-	
+
 	if err != nil {
 		atomic.AddInt64(&m.FailedQueries, 1)
 	} else {
 		atomic.AddInt64(&m.SuccessfulQueries, 1)
 	}
-	
+
 	if duration > m.SlowQueryThreshold {
 		atomic.AddInt64(&m.SlowQueries, 1)
 	}
@@ -367,12 +367,12 @@ func (m *DBMetrics) GetStats() MetricsStats {
 	failed := atomic.LoadInt64(&m.FailedQueries)
 	totalTime := atomic.LoadInt64(&m.TotalQueryTime)
 	slow := atomic.LoadInt64(&m.SlowQueries)
-	
+
 	avgTime := time.Duration(0)
 	if total > 0 {
 		avgTime = time.Duration(totalTime / total)
 	}
-	
+
 	return MetricsStats{
 		TotalQueries:      total,
 		SuccessfulQueries: successful,
@@ -396,12 +396,12 @@ type MetricsStats struct {
 // NewRetryPolicy creates a new retry policy
 func NewRetryPolicy(config *DBAdvancedConfig) *RetryPolicy {
 	rp := &RetryPolicy{
-		MaxRetries:       3,
-		InitialBackoff:   100 * time.Millisecond,
-		MaxBackoff:       5 * time.Second,
+		MaxRetries:        3,
+		InitialBackoff:    100 * time.Millisecond,
+		MaxBackoff:        5 * time.Second,
 		BackoffMultiplier: 2.0,
 	}
-	
+
 	if config != nil {
 		if config.MaxRetries > 0 {
 			rp.MaxRetries = config.MaxRetries
@@ -410,7 +410,7 @@ func NewRetryPolicy(config *DBAdvancedConfig) *RetryPolicy {
 			rp.InitialBackoff = config.RetryBackoff
 		}
 	}
-	
+
 	return rp
 }
 
@@ -419,14 +419,14 @@ func (rp *RetryPolicy) ShouldRetry(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	// Check if error is in retryable list
 	for _, retryableErr := range rp.RetryableErrors {
 		if err == retryableErr {
 			return true
 		}
 	}
-	
+
 	// Default: retry on context timeout/deadline exceeded
 	return err == context.DeadlineExceeded || err == context.Canceled
 }

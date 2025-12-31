@@ -9,12 +9,12 @@ import (
 
 // Monitor provides continuous monitoring of the database runtime
 type Monitor struct {
-	runtime     *DBRuntime
-	interval    time.Duration
-	stopChan    chan struct{}
-	callbacks   []MonitorCallback
-	mu          sync.RWMutex
-	running     bool
+	runtime   *DBRuntime
+	interval  time.Duration
+	stopChan  chan struct{}
+	callbacks []MonitorCallback
+	mu        sync.RWMutex
+	running   bool
 }
 
 // MonitorCallback is called when monitoring events occur
@@ -32,9 +32,9 @@ type MonitorEvent struct {
 // NewMonitor creates a new monitor
 func NewMonitor(runtime *DBRuntime, interval time.Duration) *Monitor {
 	return &Monitor{
-		runtime:  runtime,
-		interval: interval,
-		stopChan: make(chan struct{}),
+		runtime:   runtime,
+		interval:  interval,
+		stopChan:  make(chan struct{}),
 		callbacks: []MonitorCallback{},
 	}
 }

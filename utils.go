@@ -69,11 +69,11 @@ func (qe *QueryExecutor) Transaction(ctx context.Context, fn func(*AdvancedTx) e
 
 // Diagnostics provides diagnostic information about the runtime
 type Diagnostics struct {
-	Runtime          *DBRuntime
-	ConnectionStats  sql.DBStats
-	Metrics          MetricsStats
-	CircuitBreaker   string
-	Timestamp        time.Time
+	Runtime         *DBRuntime
+	ConnectionStats sql.DBStats
+	Metrics         MetricsStats
+	CircuitBreaker  string
+	Timestamp       time.Time
 }
 
 // GetDiagnostics returns comprehensive diagnostic information
@@ -133,10 +133,10 @@ Performance Metrics:
 
 // HealthStatus represents the health status of the runtime
 type HealthStatus struct {
-	Healthy       bool
-	Message       string
-	LastCheck     time.Time
-	ConnectionOK  bool
+	Healthy          bool
+	Message          string
+	LastCheck        time.Time
+	ConnectionOK     bool
 	CircuitBreakerOK bool
 }
 

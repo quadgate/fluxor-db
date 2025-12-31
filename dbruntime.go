@@ -18,28 +18,28 @@ type DBRuntime struct {
 // RuntimeConfig configures the entire database runtime
 type RuntimeConfig struct {
 	// Connection configuration
-	DSN                string
-	MaxOpenConns       int
-	MaxIdleConns       int
-	ConnMaxLifetime    time.Duration
-	ConnMaxIdleTime    time.Duration
-	
+	DSN             string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
+	ConnMaxIdleTime time.Duration
+
 	// Advanced connection features
 	LeakDetectionThreshold time.Duration
-	ValidationQuery         string
-	ValidationTimeout       time.Duration
-	WarmupConnections       int
-	WarmupTimeout           time.Duration
-	ConnectionTimeout       time.Duration
-	EnableLeakDetection     bool
-	
+	ValidationQuery        string
+	ValidationTimeout      time.Duration
+	WarmupConnections      int
+	WarmupTimeout          time.Duration
+	ConnectionTimeout      time.Duration
+	EnableLeakDetection    bool
+
 	// Gate configuration
 	CircuitBreakerMaxFailures     int
 	CircuitBreakerResetTimeout    time.Duration
 	CircuitBreakerHalfOpenTimeout time.Duration
 	MaxRequestsPerSecond          int64
 	MaxConcurrentConnections      int64
-	
+
 	// Database operation configuration
 	StmtCacheSize      int
 	SlowQueryThreshold time.Duration
@@ -53,7 +53,7 @@ func NewDBRuntime(config *RuntimeConfig) *DBRuntime {
 	if config == nil {
 		config = &RuntimeConfig{}
 	}
-	
+
 	// Create connection manager
 	connConfig := &AdvancedConfig{
 		DSN:                    config.DSN,
@@ -69,9 +69,9 @@ func NewDBRuntime(config *RuntimeConfig) *DBRuntime {
 		ConnectionTimeout:      config.ConnectionTimeout,
 		EnableLeakDetection:    config.EnableLeakDetection,
 	}
-	
+
 	connManager := NewConnectionManager(connConfig)
-	
+
 	// Create connection gate
 	gateConfig := &GateConfig{
 		MaxFailures:              config.CircuitBreakerMaxFailures,
@@ -80,16 +80,16 @@ func NewDBRuntime(config *RuntimeConfig) *DBRuntime {
 		MaxRequestsPerSecond:     config.MaxRequestsPerSecond,
 		MaxConcurrentConnections: config.MaxConcurrentConnections,
 	}
-	
+
 	gate := NewConnectionGate(gateConfig)
-	
+
 	// AdvancedDB will be created after connection is opened
 	runtime := &DBRuntime{
 		connManager: connManager,
 		gate:        gate,
 		config:      config,
 	}
-	
+
 	return runtime
 }
 
@@ -98,7 +98,7 @@ func (r *DBRuntime) Connect() error {
 	if err := r.connManager.Open(); err != nil {
 		return fmt.Errorf("failed to open connection: %w", err)
 	}
-	
+
 	// Create advanced DB wrapper
 	dbConfig := &DBAdvancedConfig{
 		StmtCacheSize:      r.config.StmtCacheSize,
@@ -107,9 +107,9 @@ func (r *DBRuntime) Connect() error {
 		MaxRetries:         r.config.MaxRetries,
 		RetryBackoff:       r.config.RetryBackoff,
 	}
-	
+
 	r.advancedDB = NewAdvancedDB(r.connManager.DB(), r.gate, dbConfig)
-	
+
 	return nil
 }
 
@@ -215,23 +215,23 @@ func main() {
 		MaxIdleConns:    10,
 		ConnMaxLifetime: 30 * time.Minute,
 		ConnMaxIdleTime: 10 * time.Minute,
-		
+
 		// Advanced connection features
 		LeakDetectionThreshold: 10 * time.Minute,
-		ValidationQuery:         "SELECT 1 FROM DUAL",
-		ValidationTimeout:       5 * time.Second,
-		WarmupConnections:       5,
-		WarmupTimeout:           30 * time.Second,
-		ConnectionTimeout:       30 * time.Second,
-		EnableLeakDetection:     true,
-		
+		ValidationQuery:        "SELECT 1 FROM DUAL",
+		ValidationTimeout:      5 * time.Second,
+		WarmupConnections:      5,
+		WarmupTimeout:          30 * time.Second,
+		ConnectionTimeout:      30 * time.Second,
+		EnableLeakDetection:    true,
+
 		// Circuit breaker settings
 		CircuitBreakerMaxFailures:     5,
 		CircuitBreakerResetTimeout:    60 * time.Second,
 		CircuitBreakerHalfOpenTimeout: 10 * time.Second,
 		MaxRequestsPerSecond:          1000,
 		MaxConcurrentConnections:      100,
-		
+
 		// Query settings
 		StmtCacheSize:      200,
 		SlowQueryThreshold: 1 * time.Second,
@@ -239,34 +239,34 @@ func main() {
 		MaxRetries:         3,
 		RetryBackoff:       100 * time.Millisecond,
 	}
-	
+
 	runtime := NewDBRuntime(config)
-	
+
 	// Connect to database
 	if err := runtime.Connect(); err != nil {
 		fmt.Printf("Failed to connect: %v\n", err)
 		return
 	}
 	defer runtime.Disconnect()
-	
+
 	// Perform health check
 	ctx := context.Background()
 	if err := runtime.HealthCheck(ctx); err != nil {
 		fmt.Printf("Health check failed: %v\n", err)
 		return
 	}
-	
+
 	fmt.Println("Advanced Oracle Database Runtime is ready!")
 	fmt.Printf("Circuit Breaker State: %s\n", runtime.CircuitBreakerState())
 	fmt.Printf("Connection Stats: %+v\n", runtime.Stats())
-	
+
 	// Example query execution
 	result, err := runtime.Exec(ctx, "SELECT 1 FROM DUAL")
 	if err != nil {
 		fmt.Printf("Query failed: %v\n", err)
 		return
 	}
-	
+
 	fmt.Printf("Query executed successfully: %+v\n", result)
 	fmt.Printf("Performance Metrics: %+v\n", runtime.Metrics())
 }
