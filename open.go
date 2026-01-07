@@ -181,7 +181,11 @@ func (cm *ConnectionManager) Open() error {
 
 // warmupConnections pre-creates connections to reduce latency
 func (cm *ConnectionManager) warmupConnections() {
-	if cm.warmupDone.Load() {
+	cm.mu.RLock()
+	db := cm.db
+	cm.mu.RUnlock()
+	
+	if cm.warmupDone.Load() || db == nil {
 		return
 	}
 	defer cm.warmupDone.Store(true)
@@ -196,7 +200,7 @@ func (cm *ConnectionManager) warmupConnections() {
 
 	// Create warmup connections
 	for i := 0; i < cm.config.WarmupConnections && i < cm.config.MaxIdleConns; i++ {
-		conn, err := cm.db.Conn(ctx)
+		conn, err := db.Conn(ctx)
 		if err != nil {
 			continue
 		}
