@@ -284,11 +284,11 @@ func (s *TCPServer) handlePing(conn net.Conn, msg *TCPMessage) {
 }
 
 // handleExec handles an exec message
-func (s *TCPServer) handleExec(ctx context.Context, conn net.Conn, msg *TCPMessage) {
+func (s *TCPServer) handleExec(ctx context.Context, conn net.Conn, msg *TCPMessage) *TCPResponse {
 	result, err := s.runtime.Exec(ctx, msg.Query, msg.Args...)
 	if err != nil {
 		s.sendError(conn, msg.ID, err)
-		return
+		return nil
 	}
 
 	rowsAffected, _ := result.RowsAffected()
@@ -302,25 +302,26 @@ func (s *TCPServer) handleExec(ctx context.Context, conn net.Conn, msg *TCPMessa
 	resp, err := NewSuccessResponse(msg.ID, execResult)
 	if err != nil {
 		s.sendError(conn, msg.ID, err)
-		return
+		return nil
 	}
 
 	s.sendResponse(conn, resp)
+	return resp
 }
 
 // handleQuery handles a query message
-func (s *TCPServer) handleQuery(ctx context.Context, conn net.Conn, msg *TCPMessage) {
+func (s *TCPServer) handleQuery(ctx context.Context, conn net.Conn, msg *TCPMessage) *TCPResponse {
 	rows, err := s.runtime.Query(ctx, msg.Query, msg.Args...)
 	if err != nil {
 		s.sendError(conn, msg.ID, err)
-		return
+		return nil
 	}
 	defer rows.Close()
 
 	columns, err := rows.Columns()
 	if err != nil {
 		s.sendError(conn, msg.ID, err)
-		return
+		return nil
 	}
 
 	var results [][]interface{}
@@ -333,7 +334,7 @@ func (s *TCPServer) handleQuery(ctx context.Context, conn net.Conn, msg *TCPMess
 
 		if err := rows.Scan(valuePtrs...); err != nil {
 			s.sendError(conn, msg.ID, err)
-			return
+			return nil
 		}
 
 		// Convert []byte to string for JSON serialization
@@ -348,7 +349,7 @@ func (s *TCPServer) handleQuery(ctx context.Context, conn net.Conn, msg *TCPMess
 
 	if err := rows.Err(); err != nil {
 		s.sendError(conn, msg.ID, err)
-		return
+		return nil
 	}
 
 	queryResult := QueryResult{
@@ -359,10 +360,11 @@ func (s *TCPServer) handleQuery(ctx context.Context, conn net.Conn, msg *TCPMess
 	resp, err := NewSuccessResponse(msg.ID, queryResult)
 	if err != nil {
 		s.sendError(conn, msg.ID, err)
-		return
+		return nil
 	}
 
 	s.sendResponse(conn, resp)
+	return resp
 }
 
 // handleStats handles a stats message

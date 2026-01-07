@@ -112,7 +112,7 @@ func NewConnectionManager(config *AdvancedConfig) *ConnectionManager {
 	}
 	// Set default database type if not specified
 	if config.DatabaseType == "" {
-		config.DatabaseType = DatabaseTypeOracle
+		config.DatabaseType = DatabaseTypeSQLite
 	}
 
 	return cm
@@ -136,10 +136,12 @@ func (cm *ConnectionManager) Open() error {
 		driverName = "mysql"
 	case DatabaseTypeOracle:
 		driverName = "godror"
+	case DatabaseTypeSQLite:
+		driverName = "sqlite3"
 	default:
-		// Default to Oracle for backward compatibility
-		driverName = "godror"
-		cm.config.DatabaseType = DatabaseTypeOracle
+		// Default to SQLite for in-memory capability
+		driverName = "sqlite3"
+		cm.config.DatabaseType = DatabaseTypeSQLite
 	}
 
 	db, err := sql.Open(driverName, cm.config.DSN)

@@ -15,7 +15,7 @@ func Example_LegacyDatabaseIntegration() {
 	cfg := NewConfigBuilder().
 		WithDatabaseType(DatabaseTypePostgreSQL).
 		WithDSN("postgres://user:pass@localhost:5432/dbname?sslmode=disable").
-		.WithBackpressure("block", 0). // block when legacy DB can't handle load
+		WithBackpressure("block", 0). // block when legacy DB can't handle load
 		Build()
 
 	rt := NewDBRuntime(cfg)

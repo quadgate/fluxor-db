@@ -21,10 +21,15 @@ func NewConfigBuilder() *ConfigBuilder {
 
 // DefaultConfig returns a configuration with production-ready defaults
 func DefaultConfig() *RuntimeConfig {
-	dbType := DatabaseType(getEnv("DB_TYPE", string(DatabaseTypeOracle)))
-	validationQuery := "SELECT 1 FROM DUAL"
-	if dbType == DatabaseTypePostgreSQL || dbType == DatabaseTypeMySQL {
-		validationQuery = "SELECT 1"
+	dbType := DatabaseType(getEnv("DB_TYPE", string(DatabaseTypeSQLite)))
+	validationQuery := "SELECT 1"
+	if dbType == DatabaseTypeOracle {
+		validationQuery = "SELECT 1 FROM DUAL"
+	}
+
+	dsn := getEnv("DB_DSN", "")
+	if dsn == "" && dbType == DatabaseTypeSQLite {
+		dsn = ":memory:" // Default to in-memory SQLite
 	}
 
 	return &RuntimeConfig{
@@ -32,7 +37,7 @@ func DefaultConfig() *RuntimeConfig {
 		DatabaseType:    dbType,
 
 		// Basic connection settings
-		DSN:             getEnv("DB_DSN", ""),
+		DSN:             dsn,
 		MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 50),
 		MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 10),
 		ConnMaxLifetime: getEnvDuration("DB_CONN_MAX_LIFETIME", 30*time.Minute),
@@ -64,6 +69,12 @@ func DefaultConfig() *RuntimeConfig {
 		// Backpressure defaults (drop by default for backward compatibility)
 		BackpressureMode:    getEnv("DB_BACKPRESSURE_MODE", "drop"),
 		BackpressureTimeout: getEnvDuration("DB_BACKPRESSURE_TIMEOUT", 0),
+
+		// In-memory optimizations
+		EnableAggressiveCaching: getEnvBool("DB_AGGRESSIVE_CACHING", false),
+		CacheDefaultTTL:         getEnvDuration("DB_CACHE_DEFAULT_TTL", 300*time.Second),
+		CacheCapacity:           getEnvInt("DB_CACHE_CAPACITY", 10000),
+		InMemoryMode:            getEnvBool("DB_IN_MEMORY_MODE", false),
 	}
 }
 
@@ -71,7 +82,7 @@ func DefaultConfig() *RuntimeConfig {
 func (cb *ConfigBuilder) WithDatabaseType(dbType DatabaseType) *ConfigBuilder {
 	cb.config.DatabaseType = dbType
 	// Update validation query based on database type
-	if dbType == DatabaseTypePostgreSQL || dbType == DatabaseTypeMySQL {
+	if dbType == DatabaseTypePostgreSQL || dbType == DatabaseTypeMySQL || dbType == DatabaseTypeSQLite {
 		if cb.config.ValidationQuery == "SELECT 1 FROM DUAL" {
 			cb.config.ValidationQuery = "SELECT 1"
 		}
@@ -129,6 +140,31 @@ func (cb *ConfigBuilder) WithRateLimit(maxRequestsPerSecond int64) *ConfigBuilde
 func (cb *ConfigBuilder) WithBackpressure(mode string, timeout time.Duration) *ConfigBuilder {
 	cb.config.BackpressureMode = mode
 	cb.config.BackpressureTimeout = timeout
+	return cb
+}
+
+// WithInMemoryMode enables in-memory optimizations for maximum performance
+func (cb *ConfigBuilder) WithInMemoryMode(enabled bool) *ConfigBuilder {
+	cb.config.InMemoryMode = enabled
+	if enabled {
+		// Auto-configure for in-memory performance
+		cb.config.EnableAggressiveCaching = true
+		cb.config.CacheDefaultTTL = 600 * time.Second // 10 minutes
+		cb.config.CacheCapacity = 50000              // Large cache
+		// Use SQLite in-memory if no DSN specified
+		if cb.config.DSN == "" {
+			cb.config.DatabaseType = DatabaseTypeSQLite
+			cb.config.DSN = ":memory:"
+		}
+	}
+	return cb
+}
+
+// WithAggressiveCaching enables aggressive caching with custom settings
+func (cb *ConfigBuilder) WithAggressiveCaching(capacity int, defaultTTL time.Duration) *ConfigBuilder {
+	cb.config.EnableAggressiveCaching = true
+	cb.config.CacheCapacity = capacity
+	cb.config.CacheDefaultTTL = defaultTTL
 	return cb
 }
 

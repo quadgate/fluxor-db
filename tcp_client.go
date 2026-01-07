@@ -112,11 +112,17 @@ func (c *TCPClient) Ping() error {
 
 // Exec executes a query without returning rows
 func (c *TCPClient) Exec(query string, args ...interface{}) (*ExecResult, error) {
+	return c.ExecWithIdempotency(query, "", args...)
+}
+
+// ExecWithIdempotency executes a query with idempotency key
+func (c *TCPClient) ExecWithIdempotency(query string, idempotencyKey string, args ...interface{}) (*ExecResult, error) {
 	msg := &TCPMessage{
-		Type:  MessageTypeExec,
-		ID:    c.nextID(),
-		Query: query,
-		Args:  args,
+		Type:           MessageTypeExec,
+		ID:             c.nextID(),
+		Query:          query,
+		Args:           args,
+		IdempotencyKey: idempotencyKey,
 	}
 
 	resp, err := c.sendAndReceive(msg)
@@ -133,11 +139,17 @@ func (c *TCPClient) Exec(query string, args ...interface{}) (*ExecResult, error)
 
 // Query executes a query that returns rows
 func (c *TCPClient) Query(query string, args ...interface{}) (*QueryResult, error) {
+	return c.QueryWithIdempotency(query, "", args...)
+}
+
+// QueryWithIdempotency executes a query with idempotency key
+func (c *TCPClient) QueryWithIdempotency(query string, idempotencyKey string, args ...interface{}) (*QueryResult, error) {
 	msg := &TCPMessage{
-		Type:  MessageTypeQuery,
-		ID:    c.nextID(),
-		Query: query,
-		Args:  args,
+		Type:           MessageTypeQuery,
+		ID:             c.nextID(),
+		Query:          query,
+		Args:           args,
+		IdempotencyKey: idempotencyKey,
 	}
 
 	resp, err := c.sendAndReceive(msg)

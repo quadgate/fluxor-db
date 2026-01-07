@@ -9,6 +9,7 @@ import (
 	_ "github.com/go-sql-driver/mysql" // MySQL driver
 	_ "github.com/godror/godror"        // Oracle driver
 	_ "github.com/lib/pq"               // PostgreSQL driver
+	_ "github.com/mattn/go-sqlite3"     // SQLite driver
 )
 
 // DatabaseType represents the type of database
@@ -21,6 +22,8 @@ const (
 	DatabaseTypePostgreSQL DatabaseType = "postgres"
 	// DatabaseTypeMySQL represents MySQL Database
 	DatabaseTypeMySQL DatabaseType = "mysql"
+	// DatabaseTypeSQLite represents SQLite Database (in-memory capable)
+	DatabaseTypeSQLite DatabaseType = "sqlite"
 )
 
 // DBRuntime is an advanced database runtime that supports Oracle and PostgreSQL
@@ -68,6 +71,12 @@ type RuntimeConfig struct {
 	// Backpressure configuration (for connection gating)
 	BackpressureMode    string        // drop | block | timeout
 	BackpressureTimeout time.Duration // used when mode == timeout
+
+	// In-memory optimizations
+	EnableAggressiveCaching bool          // Cache everything possible
+	CacheDefaultTTL         time.Duration // Default cache TTL
+	CacheCapacity           int           // Cache capacity
+	InMemoryMode            bool          // Pure in-memory mode
 }
 
 // NewDBRuntime creates a new advanced database runtime
@@ -113,6 +122,19 @@ func NewDBRuntime(config *RuntimeConfig) *DBRuntime {
 		connManager: connManager,
 		gate:        gate,
 		config:      config,
+	}
+
+	// Auto-configure cache for in-memory optimizations
+	if config.EnableAggressiveCaching || config.InMemoryMode {
+		capacity := config.CacheCapacity
+		if capacity <= 0 {
+			capacity = 10000
+		}
+		ttl := config.CacheDefaultTTL
+		if ttl <= 0 {
+			ttl = 300 * time.Second
+		}
+		runtime.cache = NewInMemoryCache(capacity, ttl)
 	}
 
 	return runtime
