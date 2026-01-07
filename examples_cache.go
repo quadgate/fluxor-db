@@ -6,12 +6,16 @@ import (
 	"time"
 )
 
-// Example showing how to enable backpressure and use the in-memory cache layer.
-func Example_CacheAndBackpressure() {
+// Example showing legacy database integration with backpressure and in-memory cache.
+// This approach is ideal for legacy systems that:
+// - Don't have Redis available
+// - Have unpredictable performance
+// - Need gradual modernization
+func Example_LegacyDatabaseIntegration() {
 	cfg := NewConfigBuilder().
 		WithDatabaseType(DatabaseTypePostgreSQL).
 		WithDSN("postgres://user:pass@localhost:5432/dbname?sslmode=disable").
-		WithBackpressure("block", 0). // block when max concurrency reached
+		.WithBackpressure("block", 0). // block when legacy DB can't handle load
 		Build()
 
 	rt := NewDBRuntime(cfg)

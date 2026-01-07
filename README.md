@@ -1,33 +1,44 @@
-# Advanced Database Runtime for Oracle, PostgreSQL & MySQL
-## With TCP Network Layer
+# Fluxor-DB: Legacy Database Integration Runtime
+## Multi-Database Support with Modern Patterns
 
-An enterprise-grade database runtime for Go that supports Oracle, PostgreSQL, and MySQL databases, exceeding HikariCP capabilities with advanced features for production environments. Now includes TCP network layer for remote database access.
+A specialized database runtime for **legacy database modernization** in Go, supporting Oracle, PostgreSQL, and MySQL. Designed for organizations migrating from legacy systems to microservices architecture without external dependencies like Redis.
+
+## 🎯 Legacy Database Integration
+
+Perfect for:
+- **Legacy system modernization** - Wrap old databases with modern patterns
+- **Gradual migration** - Add caching and resilience without infrastructure changes  
+- **No Redis environments** - In-memory cache as Redis alternative
+- **Unpredictable legacy DBs** - Backpressure and circuit breakers for stability
+- **Microservices transition** - TCP layer for service-oriented architecture
 
 ## Features
 
-### 🚀 Core Features
-- **Advanced Connection Pooling** - Efficient connection management with Oracle-specific optimizations
-- **Connection Leak Detection** - Automatic detection and reporting of connection leaks
-- **Connection Validation** - Pre-use validation with retry logic
-- **Connection Warm-up** - Pre-creates connections to reduce cold start latency
-- **TCP Network Layer** - Remote database access over TCP/IP with JSON protocol
+### 🚀 Legacy Integration Features
+- **In-Memory Cache Layer** - Redis alternative for legacy environments
+- **Backpressure Handling** - Block/timeout modes for legacy DB performance limits
+- **Advanced Connection Pooling** - Manage unreliable legacy connections
+- **Connection Leak Detection** - Critical for legacy systems with connection issues
+- **Connection Validation** - Pre-use validation with retry logic for flaky connections
+- **TCP Network Layer** - Expose legacy databases as microservices
 
-### 🌐 TCP Network Layer (NEW)
-- **TCP Server** - Expose database runtime over TCP network
-- **TCP Client** - Connect to remote database runtime
-- **JSON Protocol** - Simple and efficient message format
-- **Multiple Clients** - Handle concurrent client connections
+### 🌐 TCP Network Layer (Microservices Ready)
+- **Legacy DB as Service** - Expose legacy database runtime over TCP
+- **Multiple Clients** - Support distributed applications connecting to legacy DB
+- **JSON Protocol** - Simple protocol for cross-platform legacy integration
 - **Remote Operations** - Execute queries, transactions, get metrics remotely
 
-### 🛡️ Resilience & Protection
-- **Circuit Breaker** - Prevents cascading failures with configurable thresholds
-- **Rate Limiting** - Token bucket rate limiting to protect against overload
-- **Connection Limiting** - Limits concurrent connections to prevent resource exhaustion
-- **Automatic Retry** - Exponential backoff retry for transient failures
+### 🛡️ Legacy Database Resilience
+- **Circuit Breaker** - Essential for unreliable legacy database connections
+- **Backpressure Control** - Block/timeout modes when legacy DB can't handle load
+- **Rate Limiting** - Protect legacy systems from overload  
+- **Connection Limiting** - Prevent resource exhaustion on legacy hardware
+- **Automatic Retry** - Handle transient failures common in legacy systems
 
-### ⚡ Performance
-- **Prepared Statement Caching** - Configurable cache for prepared statements
-- **Query Timeout Management** - Prevents hanging queries
+### ⚡ Performance for Legacy Systems
+- **In-Memory Caching** - Redis replacement for legacy environments
+- **Prepared Statement Caching** - Optimize repeated queries on slow legacy DBs
+- **Query Timeout Management** - Prevent hanging on unresponsive legacy systems
 - **Performance Metrics** - Comprehensive metrics collection and reporting
 - **Slow Query Detection** - Automatic detection of slow queries
 

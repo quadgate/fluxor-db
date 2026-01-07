@@ -14,6 +14,7 @@ import (
 
 // TCPServer represents a TCP server for database runtime
 type TCPServer struct {
+	config        *TCPServerConfig
 	runtime       *DBRuntime
 	address       string
 	listener      net.Listener
@@ -22,21 +23,57 @@ type TCPServer struct {
 	shutdown      chan struct{}
 	wg            sync.WaitGroup
 	mu            sync.RWMutex
+	// DDoS protection
+	ipConnections map[string]int
+	ipRateLimits  map[string]*time.Time
+	blacklistMap  map[string]bool
+	whitelistMap  map[string]bool
+	// Idempotency
+	idempotencyCache Cache
 }
 
 // TCPServerConfig configures the TCP server
 type TCPServerConfig struct {
-	Address string
-	Runtime *DBRuntime
+	Address              string
+	Runtime              *DBRuntime
+	EnableIdempotency    bool
+	EnableDDoSProtection bool
+	MaxRequestSize       int64
+	MaxConnectionsPerIP  int
+	RateLimitPerIP       int64  // requests per second per IP
+	BlacklistedIPs       []string
+	WhitelistedIPs       []string
 }
 
 // NewTCPServer creates a new TCP server
 func NewTCPServer(config *TCPServerConfig) *TCPServer {
-	return &TCPServer{
-		runtime:  config.Runtime,
-		address:  config.Address,
-		shutdown: make(chan struct{}),
+	server := &TCPServer{
+		config:        config,
+		runtime:       config.Runtime,
+		address:       config.Address,
+		shutdown:      make(chan struct{}),
+		ipConnections: make(map[string]int),
+		ipRateLimits:  make(map[string]*time.Time),
+		blacklistMap:  make(map[string]bool),
+		whitelistMap:  make(map[string]bool),
 	}
+
+	// Initialize blacklist
+	for _, ip := range config.BlacklistedIPs {
+		server.blacklistMap[ip] = true
+	}
+
+	// Initialize whitelist
+	for _, ip := range config.WhitelistedIPs {
+		server.whitelistMap[ip] = true
+	}
+
+	// Initialize idempotency cache if enabled
+	if config.EnableIdempotency {
+		server.idempotencyCache = NewInMemoryCache(10000, 300*time.Second) // 5min TTL
+	}
+
+	return server
 }
 
 // Start starts the TCP server
@@ -129,7 +166,14 @@ func (s *TCPServer) handleClient(clientID uint64, conn net.Conn) {
 	defer conn.Close()
 	defer s.clients.Delete(clientID)
 
-	log.Printf("Client %d connected from %s", clientID, conn.RemoteAddr())
+	clientIP := s.getClientIP(conn)
+	log.Printf("Client %d connected from %s (IP: %s)", clientID, conn.RemoteAddr(), clientIP)
+
+	// DDoS protection checks
+	if s.config.EnableDDoSProtection && !s.allowConnection(clientIP) {
+		log.Printf("Connection from %s blocked by DDoS protection", clientIP)
+		return
+	}
 
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB buffer
@@ -142,12 +186,19 @@ func (s *TCPServer) handleClient(clientID uint64, conn net.Conn) {
 		}
 
 		data := scanner.Bytes()
+		
+		// DDoS protection - track request size
+		requestSize := int64(len(data))
+		
 		msg, err := DecodeTCPMessage(data)
 		if err != nil {
 			log.Printf("Failed to decode message from client %d: %v", clientID, err)
 			s.sendError(conn, "", err)
 			continue
 		}
+		
+		msg.RequestSize = requestSize
+		msg.ClientIP = clientIP
 
 		s.handleMessage(conn, msg)
 
@@ -166,6 +217,33 @@ func (s *TCPServer) handleClient(clientID uint64, conn net.Conn) {
 
 // handleMessage handles a single message
 func (s *TCPServer) handleMessage(conn net.Conn, msg *TCPMessage) {
+	clientIP := s.getClientIP(conn)
+	
+	// Set client IP for tracking
+	msg.ClientIP = clientIP
+	
+	// DDoS protection - request size check
+	if s.config.EnableDDoSProtection && s.config.MaxRequestSize > 0 {
+		if msg.RequestSize > s.config.MaxRequestSize {
+			s.sendError(conn, msg.ID, fmt.Errorf("request too large: %d bytes", msg.RequestSize))
+			return
+		}
+	}
+	
+	// DDoS protection - rate limiting per IP
+	if s.config.EnableDDoSProtection && !s.checkRateLimit(clientIP) {
+		s.sendError(conn, msg.ID, fmt.Errorf("rate limit exceeded for IP: %s", clientIP))
+		return
+	}
+	
+	// Idempotency check
+	if s.config.EnableIdempotency && msg.IdempotencyKey != "" {
+		if result := s.checkIdempotency(msg); result != nil {
+			s.sendResponse(conn, result)
+			return
+		}
+	}
+
 	ctx := context.Background()
 
 	switch msg.Type {
@@ -173,10 +251,16 @@ func (s *TCPServer) handleMessage(conn net.Conn, msg *TCPMessage) {
 		s.handlePing(conn, msg)
 
 	case MessageTypeExec:
-		s.handleExec(ctx, conn, msg)
+		response := s.handleExec(ctx, conn, msg)
+		if s.config.EnableIdempotency && msg.IdempotencyKey != "" {
+			s.storeIdempotency(msg, response)
+		}
 
 	case MessageTypeQuery:
-		s.handleQuery(ctx, conn, msg)
+		response := s.handleQuery(ctx, conn, msg)
+		if s.config.EnableIdempotency && msg.IdempotencyKey != "" {
+			s.storeIdempotency(msg, response)
+		}
 
 	case MessageTypeStats:
 		s.handleStats(conn, msg)
@@ -338,6 +422,94 @@ func (s *TCPServer) sendResponse(conn net.Conn, resp *TCPResponse) {
 	if _, err := conn.Write(data); err != nil {
 		log.Printf("Failed to write response: %v", err)
 	}
+}
+
+// getClientIP extracts the real client IP address
+func (s *TCPServer) getClientIP(conn net.Conn) string {
+	addr := conn.RemoteAddr().String()
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	return host
+}
+
+// allowConnection checks if a connection from the IP should be allowed
+func (s *TCPServer) allowConnection(clientIP string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check blacklist
+	if s.blacklistMap[clientIP] {
+		return false
+	}
+
+	// If whitelist exists and IP not in it, deny
+	if len(s.whitelistMap) > 0 && !s.whitelistMap[clientIP] {
+		return false
+	}
+
+	// Check connections per IP limit
+	if s.config.MaxConnectionsPerIP > 0 {
+		if s.ipConnections[clientIP] >= s.config.MaxConnectionsPerIP {
+			return false
+		}
+		s.ipConnections[clientIP]++
+	}
+
+	return true
+}
+
+// checkRateLimit checks if request is within rate limit for IP
+func (s *TCPServer) checkRateLimit(clientIP string) bool {
+	if s.config.RateLimitPerIP <= 0 {
+		return true
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	lastRequest, exists := s.ipRateLimits[clientIP]
+	
+	if !exists || lastRequest == nil {
+		s.ipRateLimits[clientIP] = &now
+		return true
+	}
+
+	// Simple rate limiting - one request per second per IP
+	if now.Sub(*lastRequest) < time.Second {
+		return false
+	}
+
+	s.ipRateLimits[clientIP] = &now
+	return true
+}
+
+// checkIdempotency checks if request has been processed before
+func (s *TCPServer) checkIdempotency(msg *TCPMessage) *TCPResponse {
+	if s.idempotencyCache == nil || msg.IdempotencyKey == "" {
+		return nil
+	}
+
+	ctx := context.Background()
+	if cached, ok := s.idempotencyCache.Get(ctx, msg.IdempotencyKey); ok {
+		if response, ok := cached.(*TCPResponse); ok {
+			log.Printf("Returning cached response for idempotency key: %s", msg.IdempotencyKey)
+			return response
+		}
+	}
+	return nil
+}
+
+// storeIdempotency stores the response for future idempotency checks
+func (s *TCPServer) storeIdempotency(msg *TCPMessage, response *TCPResponse) {
+	if s.idempotencyCache == nil || msg.IdempotencyKey == "" || response == nil {
+		return
+	}
+
+	ctx := context.Background()
+	s.idempotencyCache.Set(ctx, msg.IdempotencyKey, response, 300*time.Second) // 5 minutes
 }
 
 // sendError sends an error response to the client

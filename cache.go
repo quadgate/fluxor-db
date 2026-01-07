@@ -7,9 +7,10 @@ import (
 	"time"
 )
 
-// Cache provides a simple interface for key-value caching with TTL
-// Values are opaque and should be JSON-serializable if used across boundaries.
-// Implementations should be concurrency-safe.
+// Cache provides a Redis alternative for legacy database integration scenarios.
+// Designed for systems where external dependencies (Redis) are not available
+// or where gradual modernization is needed. Values should be JSON-serializable
+// if used across boundaries. Implementations must be concurrency-safe.
 
 type Cache interface {
 	Get(ctx context.Context, key string) (value interface{}, ok bool)
@@ -34,8 +35,9 @@ type cacheItem struct {
 	expireAt time.Time
 }
 
-// InMemoryCache is a simple LRU cache with TTL
-// It is designed for low-latency, in-process caching.
+// InMemoryCache is a Redis replacement for legacy database scenarios.
+// Provides LRU eviction with TTL, designed for legacy systems that need
+// caching but cannot add external dependencies like Redis.
 
 type InMemoryCache struct {
 	mu         sync.RWMutex

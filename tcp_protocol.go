@@ -25,11 +25,14 @@ const (
 
 // TCPMessage represents a message sent over TCP
 type TCPMessage struct {
-	Type    MessageType     `json:"type"`
-	ID      string          `json:"id"`
-	Query   string          `json:"query,omitempty"`
-	Args    []interface{}   `json:"args,omitempty"`
-	Payload json.RawMessage `json:"payload,omitempty"`
+	Type           MessageType     `json:"type"`
+	ID             string          `json:"id"`
+	Query          string          `json:"query,omitempty"`
+	Args           []interface{}   `json:"args,omitempty"`
+	Payload        json.RawMessage `json:"payload,omitempty"`
+	IdempotencyKey string          `json:"idempotency_key,omitempty"`
+	ClientIP       string          `json:"client_ip,omitempty"`
+	RequestSize    int64           `json:"request_size,omitempty"`
 }
 
 // TCPResponse represents a response sent over TCP
