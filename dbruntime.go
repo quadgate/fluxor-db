@@ -5,19 +5,37 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	_ "github.com/go-sql-driver/mysql" // MySQL driver
+	_ "github.com/godror/godror"        // Oracle driver
+	_ "github.com/lib/pq"               // PostgreSQL driver
 )
 
-// DBRuntime is an advanced Oracle database runtime that exceeds HikariCP capabilities
+// DatabaseType represents the type of database
+type DatabaseType string
+
+const (
+	// DatabaseTypeOracle represents Oracle Database
+	DatabaseTypeOracle DatabaseType = "oracle"
+	// DatabaseTypePostgreSQL represents PostgreSQL Database
+	DatabaseTypePostgreSQL DatabaseType = "postgres"
+	// DatabaseTypeMySQL represents MySQL Database
+	DatabaseTypeMySQL DatabaseType = "mysql"
+)
+
+// DBRuntime is an advanced database runtime that supports Oracle and PostgreSQL
 type DBRuntime struct {
 	connManager *ConnectionManager
 	gate        *ConnectionGate
 	advancedDB  *AdvancedDB
 	config      *RuntimeConfig
+	cache       Cache
 }
 
 // RuntimeConfig configures the entire database runtime
 type RuntimeConfig struct {
 	// Connection configuration
+	DatabaseType    DatabaseType
 	DSN             string
 	MaxOpenConns    int
 	MaxIdleConns    int
@@ -46,6 +64,10 @@ type RuntimeConfig struct {
 	QueryTimeout       time.Duration
 	MaxRetries         int
 	RetryBackoff       time.Duration
+
+	// Backpressure configuration (for connection gating)
+	BackpressureMode    string        // drop | block | timeout
+	BackpressureTimeout time.Duration // used when mode == timeout
 }
 
 // NewDBRuntime creates a new advanced database runtime
@@ -56,6 +78,7 @@ func NewDBRuntime(config *RuntimeConfig) *DBRuntime {
 
 	// Create connection manager
 	connConfig := &AdvancedConfig{
+		DatabaseType:           config.DatabaseType,
 		DSN:                    config.DSN,
 		MaxOpenConns:           config.MaxOpenConns,
 		MaxIdleConns:           config.MaxIdleConns,
@@ -79,6 +102,8 @@ func NewDBRuntime(config *RuntimeConfig) *DBRuntime {
 		HalfOpenTimeout:          config.CircuitBreakerHalfOpenTimeout,
 		MaxRequestsPerSecond:     config.MaxRequestsPerSecond,
 		MaxConcurrentConnections: config.MaxConcurrentConnections,
+		BackpressureMode:         config.BackpressureMode,
+		BackpressureTimeout:      config.BackpressureTimeout,
 	}
 
 	gate := NewConnectionGate(gateConfig)
@@ -131,6 +156,16 @@ func (r *DBRuntime) AdvancedDB() *AdvancedDB {
 	return r.advancedDB
 }
 
+// SetCache sets the cache implementation for the runtime
+func (r *DBRuntime) SetCache(c Cache) {
+	r.cache = c
+}
+
+// Cache returns the configured cache implementation, if any
+func (r *DBRuntime) Cache() Cache {
+	return r.cache
+}
+
 // IsConnected returns whether the runtime is connected
 func (r *DBRuntime) IsConnected() bool {
 	return r.connManager.db != nil
@@ -150,6 +185,62 @@ func (r *DBRuntime) Query(ctx context.Context, query string, args ...interface{}
 		return nil, fmt.Errorf("database not connected")
 	}
 	return r.advancedDB.Query(ctx, query, args...)
+}
+
+// QueryCached executes a query and caches the materialized rows under the provided key.
+// Returns columns, rows (each row is a slice of values), whether the result came from cache, and error if any.
+func (r *DBRuntime) QueryCached(ctx context.Context, key string, ttl time.Duration, query string, args ...interface{}) ([]string, [][]interface{}, bool, error) {
+	if r.cache != nil && key != "" {
+		if v, ok := r.cache.Get(ctx, key); ok {
+			if qr, ok2 := v.(struct{
+				Columns []string
+				Rows    [][]interface{}
+			}); ok2 {
+				return qr.Columns, qr.Rows, true, nil
+			}
+		}
+	}
+
+	rows, err := r.Query(ctx, query, args...)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	var results [][]interface{}
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		ptrs := make([]interface{}, len(columns))
+		for i := range values {
+			ptrs[i] = &values[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, nil, false, err
+		}
+		for i, v := range values {
+			if b, ok := v.([]byte); ok {
+				values[i] = string(b)
+			}
+		}
+		results = append(results, values)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, false, err
+	}
+
+	if r.cache != nil && key != "" {
+		_ = r.cache.Set(ctx, key, struct{
+			Columns []string
+			Rows    [][]interface{}
+		}{Columns: columns, Rows: results}, ttl)
+	}
+
+	return columns, results, false, nil
 }
 
 // QueryRow executes a query that returns at most one row

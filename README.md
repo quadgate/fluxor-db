@@ -1,6 +1,7 @@
-# Advanced Oracle Database Runtime
+# Advanced Database Runtime for Oracle, PostgreSQL & MySQL
+## With TCP Network Layer
 
-An enterprise-grade Oracle database runtime for Go that exceeds HikariCP capabilities with advanced features for production environments.
+An enterprise-grade database runtime for Go that supports Oracle, PostgreSQL, and MySQL databases, exceeding HikariCP capabilities with advanced features for production environments. Now includes TCP network layer for remote database access.
 
 ## Features
 
@@ -9,6 +10,14 @@ An enterprise-grade Oracle database runtime for Go that exceeds HikariCP capabil
 - **Connection Leak Detection** - Automatic detection and reporting of connection leaks
 - **Connection Validation** - Pre-use validation with retry logic
 - **Connection Warm-up** - Pre-creates connections to reduce cold start latency
+- **TCP Network Layer** - Remote database access over TCP/IP with JSON protocol
+
+### 🌐 TCP Network Layer (NEW)
+- **TCP Server** - Expose database runtime over TCP network
+- **TCP Client** - Connect to remote database runtime
+- **JSON Protocol** - Simple and efficient message format
+- **Multiple Clients** - Handle concurrent client connections
+- **Remote Operations** - Execute queries, transactions, get metrics remotely
 
 ### 🛡️ Resilience & Protection
 - **Circuit Breaker** - Prevents cascading failures with configurable thresholds
@@ -31,10 +40,19 @@ An enterprise-grade Oracle database runtime for Go that exceeds HikariCP capabil
 ## Installation
 
 ```bash
+# For Oracle Database
 go get github.com/godror/godror
+
+# For PostgreSQL
+go get github.com/lib/pq
+
+# For MySQL
+go get github.com/go-sql-driver/mysql
 ```
 
 ## Quick Start
+
+### Oracle Database
 
 ```go
 package main
@@ -46,8 +64,9 @@ import (
 )
 
 func main() {
-    // Create configuration
+    // Create configuration for Oracle
     config := NewConfigBuilder().
+        WithDatabaseType(DatabaseTypeOracle).
         WithDSN("user/password@localhost:1521/XE").
         WithConnectionPool(50, 10).
         WithQuerySettings(200, 1*time.Second, 30*time.Second).
@@ -71,13 +90,117 @@ func main() {
 }
 ```
 
+### PostgreSQL Database
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "time"
+)
+
+func main() {
+    // Create configuration for PostgreSQL
+    config := NewConfigBuilder().
+        WithDatabaseType(DatabaseTypePostgreSQL).
+        WithDSN("postgres://user:password@localhost:5432/dbname?sslmode=disable").
+        WithConnectionPool(50, 10).
+        WithQuerySettings(200, 1*time.Second, 30*time.Second).
+        Build()
+
+    // Create and connect
+    runtime := NewDBRuntime(config)
+    if err := runtime.Connect(); err != nil {
+        panic(err)
+    }
+    defer runtime.Disconnect()
+
+    // Execute query
+    ctx := context.Background()
+    result, err := runtime.Exec(ctx, "SELECT 1")
+    if err != nil {
+        panic(err)
+    }
+    
+    fmt.Printf("Query executed: %+v\n", result)
+}
+```
+
+### MySQL Database
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "time"
+)
+
+func main() {
+    // Create configuration for MySQL
+    config := NewConfigBuilder().
+        WithDatabaseType(DatabaseTypeMySQL).
+        WithDSN("user:password@tcp(localhost:3306)/dbname?parseTime=true").
+        WithConnectionPool(50, 10).
+        WithQuerySettings(200, 1*time.Second, 30*time.Second).
+        Build()
+
+    // Create and connect
+    runtime := NewDBRuntime(config)
+    if err := runtime.Connect(); err != nil {
+        panic(err)
+    }
+    defer runtime.Disconnect()
+
+    // Execute query
+    ctx := context.Background()
+    result, err := runtime.Exec(ctx, "SELECT 1")
+    if err != nil {
+        panic(err)
+    }
+    
+    fmt.Printf("Query executed: %+v\n", result)
+}
+```
+
 ## Configuration
 
 ### Using ConfigBuilder (Recommended)
 
 ```go
+// For Oracle
 config := NewConfigBuilder().
+    WithDatabaseType(DatabaseTypeOracle).
     WithDSN("user/password@localhost:1521/XE").
+    WithConnectionPool(50, 10).
+    WithConnectionLifetime(30*time.Minute, 10*time.Minute).
+    WithLeakDetection(true, 10*time.Minute).
+    WithCircuitBreaker(5, 60*time.Second, 10*time.Second).
+    WithRateLimit(1000).
+    WithQuerySettings(200, 1*time.Second, 30*time.Second).
+    WithRetryPolicy(3, 100*time.Millisecond).
+    Build()
+
+// For PostgreSQL
+config := NewConfigBuilder().
+    WithDatabaseType(DatabaseTypePostgreSQL).
+    WithDSN("postgres://user:password@localhost:5432/dbname?sslmode=disable").
+    WithConnectionPool(50, 10).
+    WithConnectionLifetime(30*time.Minute, 10*time.Minute).
+    WithLeakDetection(true, 10*time.Minute).
+    WithCircuitBreaker(5, 60*time.Second, 10*time.Second).
+    WithRateLimit(1000).
+    WithQuerySettings(200, 1*time.Second, 30*time.Second).
+    WithRetryPolicy(3, 100*time.Millisecond).
+    Build()
+
+// For MySQL
+config := NewConfigBuilder().
+    WithDatabaseType(DatabaseTypeMySQL).
+    WithDSN("user:password@tcp(localhost:3306)/dbname?parseTime=true").
     WithConnectionPool(50, 10).
     WithConnectionLifetime(30*time.Minute, 10*time.Minute).
     WithLeakDetection(true, 10*time.Minute).
@@ -93,7 +216,18 @@ config := NewConfigBuilder().
 All configuration options can be set via environment variables:
 
 ```bash
+# Database type: oracle, postgres, or mysql
+export DB_TYPE=mysql
+
+# For Oracle
 export DB_DSN="user/password@localhost:1521/XE"
+
+# For PostgreSQL
+export DB_DSN="postgres://user:password@localhost:5432/dbname?sslmode=disable"
+
+# For MySQL
+export DB_DSN="user:password@tcp(localhost:3306)/dbname?parseTime=true"
+
 export DB_MAX_OPEN_CONNS=50
 export DB_MAX_IDLE_CONNS=10
 export DB_CONN_MAX_LIFETIME=30m

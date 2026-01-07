@@ -21,7 +21,16 @@ func NewConfigBuilder() *ConfigBuilder {
 
 // DefaultConfig returns a configuration with production-ready defaults
 func DefaultConfig() *RuntimeConfig {
+	dbType := DatabaseType(getEnv("DB_TYPE", string(DatabaseTypeOracle)))
+	validationQuery := "SELECT 1 FROM DUAL"
+	if dbType == DatabaseTypePostgreSQL || dbType == DatabaseTypeMySQL {
+		validationQuery = "SELECT 1"
+	}
+
 	return &RuntimeConfig{
+		// Database type
+		DatabaseType:    dbType,
+
 		// Basic connection settings
 		DSN:             getEnv("DB_DSN", ""),
 		MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 50),
@@ -31,7 +40,7 @@ func DefaultConfig() *RuntimeConfig {
 
 		// Advanced connection features
 		LeakDetectionThreshold: getEnvDuration("DB_LEAK_DETECTION_THRESHOLD", 10*time.Minute),
-		ValidationQuery:        getEnv("DB_VALIDATION_QUERY", "SELECT 1 FROM DUAL"),
+		ValidationQuery:        getEnv("DB_VALIDATION_QUERY", validationQuery),
 		ValidationTimeout:      getEnvDuration("DB_VALIDATION_TIMEOUT", 5*time.Second),
 		WarmupConnections:      getEnvInt("DB_WARMUP_CONNECTIONS", 5),
 		WarmupTimeout:          getEnvDuration("DB_WARMUP_TIMEOUT", 30*time.Second),
@@ -51,7 +60,27 @@ func DefaultConfig() *RuntimeConfig {
 		QueryTimeout:       getEnvDuration("DB_QUERY_TIMEOUT", 30*time.Second),
 		MaxRetries:         getEnvInt("DB_MAX_RETRIES", 3),
 		RetryBackoff:       getEnvDuration("DB_RETRY_BACKOFF", 100*time.Millisecond),
+
+		// Backpressure defaults (drop by default for backward compatibility)
+		BackpressureMode:    getEnv("DB_BACKPRESSURE_MODE", "drop"),
+		BackpressureTimeout: getEnvDuration("DB_BACKPRESSURE_TIMEOUT", 0),
 	}
+}
+
+// WithDatabaseType sets the database type (oracle, postgres, or mysql)
+func (cb *ConfigBuilder) WithDatabaseType(dbType DatabaseType) *ConfigBuilder {
+	cb.config.DatabaseType = dbType
+	// Update validation query based on database type
+	if dbType == DatabaseTypePostgreSQL || dbType == DatabaseTypeMySQL {
+		if cb.config.ValidationQuery == "SELECT 1 FROM DUAL" {
+			cb.config.ValidationQuery = "SELECT 1"
+		}
+	} else if dbType == DatabaseTypeOracle {
+		if cb.config.ValidationQuery == "SELECT 1" {
+			cb.config.ValidationQuery = "SELECT 1 FROM DUAL"
+		}
+	}
+	return cb
 }
 
 // WithDSN sets the database DSN
@@ -92,6 +121,14 @@ func (cb *ConfigBuilder) WithCircuitBreaker(maxFailures int, resetTimeout, halfO
 // WithRateLimit sets rate limiting
 func (cb *ConfigBuilder) WithRateLimit(maxRequestsPerSecond int64) *ConfigBuilder {
 	cb.config.MaxRequestsPerSecond = maxRequestsPerSecond
+	return cb
+}
+
+// WithBackpressure configures backpressure behavior when reaching concurrency limit
+// mode: "drop" | "block" | "timeout"; timeout used only for "timeout" mode
+func (cb *ConfigBuilder) WithBackpressure(mode string, timeout time.Duration) *ConfigBuilder {
+	cb.config.BackpressureMode = mode
+	cb.config.BackpressureTimeout = timeout
 	return cb
 }
 

@@ -60,6 +60,10 @@ type ConnectionLimiter struct {
 	currentConnections int64
 	maxConnections     int64
 	mu                 sync.RWMutex
+	// backpressure support
+	mode    string
+	timeout time.Duration
+	sem     chan struct{}
 }
 
 // NewConnectionGate creates a new connection gate
@@ -83,6 +87,14 @@ type GateConfig struct {
 
 	// Connection limiting
 	MaxConcurrentConnections int64
+
+	// Backpressure behavior when hitting connection limit
+	// Modes:
+	//   "drop"   - return error immediately (default, backwards compatible)
+	//   "block"  - block until a slot is available or context is canceled
+	//   "timeout"- wait up to BackpressureTimeout
+	BackpressureMode    string
+	BackpressureTimeout time.Duration
 }
 
 // Allow checks if a connection request should be allowed
@@ -99,7 +111,7 @@ func (cg *ConnectionGate) Allow(ctx context.Context) error {
 	}
 
 	// Check connection limiter
-	if err := cg.connectionLimiter.Acquire(); err != nil {
+	if err := cg.connectionLimiter.AcquireWithContext(ctx); err != nil {
 		cg.circuitBreaker.RecordFailure()
 		return err
 	}
@@ -288,6 +300,15 @@ func NewConnectionLimiter(config *GateConfig) *ConnectionLimiter {
 		cl.maxConnections = config.MaxConcurrentConnections
 	}
 
+	if config != nil {
+		cl.mode = config.BackpressureMode
+		cl.timeout = config.BackpressureTimeout
+		if cl.mode == "block" || cl.mode == "timeout" {
+			// semaphore with capacity = maxConnections to block when full
+			cl.sem = make(chan struct{}, cl.maxConnections)
+		}
+	}
+
 	return cl
 }
 
@@ -304,8 +325,64 @@ func (cl *ConnectionLimiter) Acquire() error {
 	return nil
 }
 
+// AcquireWithContext acquires a connection slot with backpressure behavior
+func (cl *ConnectionLimiter) AcquireWithContext(ctx context.Context) error {
+	// If no backpressure semaphore configured, use legacy non-blocking path
+	if cl.sem == nil {
+		return cl.Acquire()
+	}
+
+	// Fast path: if below maxConnections we also increment counters
+	// We rely on semaphore to represent in-flight usage consistently
+	select {
+	case cl.sem <- struct{}{}:
+		atomic.AddInt64(&cl.currentConnections, 1)
+		return nil
+	default:
+		// Full: apply backpressure according to mode
+	}
+
+	switch cl.mode {
+	case "block":
+		select {
+		case cl.sem <- struct{}{}:
+			atomic.AddInt64(&cl.currentConnections, 1)
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	case "timeout":
+		timeout := cl.timeout
+		if timeout <= 0 {
+			// fallback to immediate failure if timeout not set
+			return ErrConnectionLimit
+		}
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		select {
+		case cl.sem <- struct{}{}:
+			atomic.AddInt64(&cl.currentConnections, 1)
+			return nil
+		case <-timer.C:
+			return ErrConnectionLimit
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	default:
+		// drop (legacy behavior)
+		return ErrConnectionLimit
+	}
+}
+
 // Release releases a connection slot
 func (cl *ConnectionLimiter) Release() {
+	if cl.sem != nil {
+		// release semaphore token if acquired
+		select {
+		case <-cl.sem:
+		default:
+		}
+	}
 	atomic.AddInt64(&cl.currentConnections, -1)
 }
 

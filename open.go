@@ -49,6 +49,7 @@ type ConnectionValidator struct {
 
 // AdvancedConfig extends basic configuration with advanced features
 type AdvancedConfig struct {
+	DatabaseType    DatabaseType
 	DSN             string
 	MaxOpenConns    int
 	MaxIdleConns    int
@@ -92,13 +93,26 @@ func NewConnectionManager(config *AdvancedConfig) *ConnectionManager {
 		config.LeakDetectionThreshold = 10 * time.Minute
 	}
 	if config.ValidationQuery == "" {
-		config.ValidationQuery = "SELECT 1 FROM DUAL"
+		// Set default validation query based on database type
+		switch config.DatabaseType {
+		case DatabaseTypePostgreSQL:
+			config.ValidationQuery = "SELECT 1"
+		case DatabaseTypeMySQL:
+			config.ValidationQuery = "SELECT 1"
+		default:
+			// Default to Oracle
+			config.ValidationQuery = "SELECT 1 FROM DUAL"
+		}
 	}
 	if config.ValidationTimeout == 0 {
 		config.ValidationTimeout = 5 * time.Second
 	}
 	if config.ConnectionTimeout == 0 {
 		config.ConnectionTimeout = 30 * time.Second
+	}
+	// Set default database type if not specified
+	if config.DatabaseType == "" {
+		config.DatabaseType = DatabaseTypeOracle
 	}
 
 	return cm
@@ -113,10 +127,24 @@ func (cm *ConnectionManager) Open() error {
 		return nil
 	}
 
-	// Open database connection - godror handles Oracle-specific pooling
-	db, err := sql.Open("godror", cm.config.DSN)
+	// Open database connection based on database type
+	var driverName string
+	switch cm.config.DatabaseType {
+	case DatabaseTypePostgreSQL:
+		driverName = "postgres"
+	case DatabaseTypeMySQL:
+		driverName = "mysql"
+	case DatabaseTypeOracle:
+		driverName = "godror"
+	default:
+		// Default to Oracle for backward compatibility
+		driverName = "godror"
+		cm.config.DatabaseType = DatabaseTypeOracle
+	}
+
+	db, err := sql.Open(driverName, cm.config.DSN)
 	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
+		return fmt.Errorf("failed to open %s database: %w", cm.config.DatabaseType, err)
 	}
 
 	// Configure connection pool
