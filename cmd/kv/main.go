@@ -3,11 +3,17 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/pprof"
 
 	"dbruntime/pkg/core"
 )
 
 func main() {
+	f, _ := os.Create("kvstore.log")
+	defer f.Close()
+	fmt.Println("KV Store CLI - Logging to kvstore.log")
+	pprof.StartCPUProfile(f)
+	defer pprof.StopCPUProfile()
 	kv := core.NewKVStore()
 
 	// Put some sample data
