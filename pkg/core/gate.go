@@ -1,3 +1,0 @@
-package core
-// moved from root
-// ...existing code...
