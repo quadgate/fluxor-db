@@ -49,11 +49,7 @@ func MapJSONToStructAsList(jsonStr string, target interface{}) error {
 	return nil
 }
 
-// ListString is a slice of strings for convenience.
-type ListString []string
-
 // KVStore is a simple, thread-safe in-memory key-value store.
-type ListString []string
 
 type KVStore struct {
 	store map[string]interface{}
