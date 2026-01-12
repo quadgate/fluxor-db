@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"context"
@@ -11,6 +11,14 @@ import (
 // QueryExecutor provides a convenient interface for executing queries
 type QueryExecutor struct {
 	runtime *DBRuntime
+}
+
+// QueryExecutorInterface defines the interface for QueryExecutor
+type QueryExecutorInterface interface {
+	Select(ctx context.Context, query string, args []interface{}, scanFunc func(*sql.Rows) error) error
+	SelectOne(ctx context.Context, query string, args []interface{}, scanFunc func(*sql.Row) error) error
+	Execute(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	Transaction(ctx context.Context, fn func(*AdvancedTx) error) error
 }
 
 // NewQueryExecutor creates a new query executor

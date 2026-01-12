@@ -1,19 +1,10 @@
-package main
+// File moved to pkg/core/cache.go
 
-import (
-	"container/list"
-	"context"
-	"sync"
-	"time"
-)
+// The original content of this file has been moved to pkg/core/cache.go
 
-// Cache provides a Redis alternative for legacy database integration scenarios.
-// Designed for systems where external dependencies (Redis) are not available
-// or where gradual modernization is needed. Values should be JSON-serializable
-// if used across boundaries. Implementations must be concurrency-safe.
-
-type Cache interface {
-	Get(ctx context.Context, key string) (value interface{}, ok bool)
+// InMemoryCacheInterface defines the interface for InMemoryCache
+type InMemoryCacheInterface interface {
+	Get(ctx context.Context, key string) (interface{}, bool)
 	Set(ctx context.Context, key string, value interface{}, ttl time.Duration) bool
 	Delete(ctx context.Context, key string)
 	PurgeExpired()

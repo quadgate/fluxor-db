@@ -1,4 +1,7 @@
-package main
+// File moved to pkg/core/db.go
+
+// The original content of this file has been moved to pkg/core/db.go
+package core
 
 import (
 	"context"
@@ -18,6 +21,14 @@ type AdvancedDB struct {
 	retryPolicy  *RetryPolicy
 	queryTimeout time.Duration
 	mu           sync.RWMutex
+}
+
+// AdvancedDBInterface defines the interface for AdvancedDB
+type AdvancedDBInterface interface {
+	Query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row
+	Exec(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	Begin(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 }
 
 // PreparedStatementCache caches prepared statements for performance

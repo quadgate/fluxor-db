@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"context"
@@ -19,6 +19,13 @@ type ConnectionManager struct {
 	leakDetector      *LeakDetector
 	validator         *ConnectionValidator
 	warmupDone        atomic.Bool
+}
+
+// ConnectionManagerInterface defines the interface for ConnectionManager
+type ConnectionManagerInterface interface {
+	Acquire() (*TrackedConnection, error)
+	Release(conn *TrackedConnection) error
+	ActiveCount() int
 }
 
 // TrackedConnection tracks individual connections for leak detection
@@ -184,7 +191,7 @@ func (cm *ConnectionManager) warmupConnections() {
 	cm.mu.RLock()
 	db := cm.db
 	cm.mu.RUnlock()
-	
+
 	if cm.warmupDone.Load() || db == nil {
 		return
 	}

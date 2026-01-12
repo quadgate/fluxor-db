@@ -1,4 +1,7 @@
-package main
+// File moved to pkg/core/gate.go
+
+// The original content of this file has been moved to pkg/core/gate.go.
+package core
 
 import (
 	"context"
@@ -26,6 +29,13 @@ type ConnectionGate struct {
 	rateLimiter       *RateLimiter
 	connectionLimiter *ConnectionLimiter
 	mu                sync.RWMutex
+}
+
+// ConnectionGateInterface defines the interface for ConnectionGate
+type ConnectionGateInterface interface {
+	Allow() bool
+	Release()
+	State() string
 }
 
 // CircuitBreaker implements circuit breaker pattern
