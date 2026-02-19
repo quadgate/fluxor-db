@@ -12,7 +12,7 @@ require (
 )
 
 require (
-	filippo.io/edwards25519 v1.1.0 // indirect
+	filippo.io/edwards25519 v1.1.1 // indirect
 	github.com/VictoriaMetrics/easyproto v0.1.4 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/godror/knownpb v0.3.0 // indirect
